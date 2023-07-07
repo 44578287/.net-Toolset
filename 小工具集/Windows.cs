@@ -1,4 +1,6 @@
-﻿namespace 小工具集
+﻿using System.Net.NetworkInformation;
+
+namespace 小工具集
 {
     /// <summary>
     /// Windows用
@@ -200,6 +202,66 @@
                     return Name;
                 }
             }
+            /// <summary>
+            /// 获取所有网卡的IP
+            /// </summary>
+            /// <returns>网卡名+IP的字典</returns>
+            public static Dictionary<string, IpAddress> GetIpAddress()
+            {
+                Dictionary<string, IpAddress> TempData = new();
+                NetworkInterface[] networkInterfaces = NetworkInterface.GetAllNetworkInterfaces();
+
+                foreach (NetworkInterface networkInterface in networkInterfaces)
+                {
+                    if (networkInterface.OperationalStatus == OperationalStatus.Up)
+                    {
+                        IPInterfaceProperties ipProperties = networkInterface.GetIPProperties();
+
+                        foreach (UnicastIPAddressInformation ipInfo in ipProperties.UnicastAddresses)
+                        {
+                            if (!TempData.ContainsKey(networkInterface.Name))
+                            {
+                                TempData.Add(networkInterface.Name, new());
+                            }
+                            if (ipInfo.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                            {
+                                TempData[networkInterface.Name].IPV4 = ipInfo.Address.ToString();
+                            }
+                            if (ipInfo.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+                            {
+                                TempData[networkInterface.Name].IPV6 = ipInfo.Address.ToString();
+                            }
+                        }
+                    }
+                }
+                return TempData;
+            }
+            /// <summary>
+            /// IP地址
+            /// </summary>
+            public class IpAddress
+            {
+                public string? IPV4 { get; set; }
+                public string? IPV6 { get; set; }
+            }
+            /// <summary>
+            /// 获取公网IP
+            /// </summary>
+            /// <param name="Url">API地址</param>
+            /// <returns>公网IP地址</returns>
+            public static string? GetPublicIP(string? Url = null)
+            {
+                Url ??= "https://api.ipify.org";
+                HttpClient httpClient = new HttpClient();
+                return httpClient.GetStringAsync(Url).Result;
+            }
+        }
+        /// <summary>
+        /// 用户相关
+        /// </summary>
+        public static class User
+        {
+
         }
     }
 }
