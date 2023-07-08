@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Diagnostics;
 using System.Net.NetworkInformation;
 using SharpCompress.Archives;
 using SharpCompress.Common;
@@ -208,6 +209,144 @@ namespace 小工具集
                     }
                     return TempData;
                 }
+            }
+            /// <summary>
+            /// 异步运行应用
+            /// </summary>
+            /// <param name="Path">文件路径</param>
+            /// <param name="Args">启动指令</param>
+            /// <param name="ExternalRuns">外部运行</param>
+            /// <returns>进程</returns>
+            public static async Task<Process?> StartAppAsync(string Path, string? Args = null, bool ExternalRuns = false)
+            {
+                ProcessStartInfo startInfo = new ProcessStartInfo();
+                startInfo.FileName = Path;
+                startInfo.Arguments = Args;
+                if (ExternalRuns)
+                {
+                    startInfo.CreateNoWindow = false; // 设置为 false，使应用程序显示控制台窗口
+                    startInfo.UseShellExecute = true; // 设置为 true，使用操作系统的外壳程序启动应用程序
+                }
+                Process? process = await Task.Run(() => Process.Start(startInfo));
+                return process;
+            }
+            /// <summary>
+            /// 异步运行应用
+            /// </summary>
+            /// <param name="Path">文件路径</param>
+            /// <param name="StartInfo">启动信息</param>
+            /// <returns>进程</returns>
+            public static async Task<Process?> StartAppAsync(string Path, ProcessStartInfo StartInfo)
+            {
+                ProcessStartInfo _StartInfo = StartInfo;
+                StartInfo.FileName = Path;
+
+                Process? process = await Task.Run(() => Process.Start(StartInfo));
+                return process;
+            }
+            /// <summary>
+            /// 运行并监控应用
+            /// </summary>
+            public class AppProbes
+            {
+                string _Path = "";
+                string? _Args = null;
+                /// <summary>
+                /// 初始化
+                /// </summary>
+                /// <param name="Path">文件路径</param>
+                /// <param name="Args">启动信息</param>
+                public AppProbes(string Path, string? Args = null)
+                {
+                    _Path = Path;
+                    _Args = Args;
+                }
+                /// <summary>
+                /// 日志输出监控
+                /// </summary>
+                public event Action<string?>? LogOut;
+                /// <summary>
+                /// 进程
+                /// </summary>
+                public Process _Process = new();
+                /// <summary>
+                /// 开始运行并监控
+                /// </summary>
+                public void Start()
+                {
+                    // 创建一个新的进程
+                    _Process = new Process();
+
+                    // 设置进程启动信息
+                    _Process.StartInfo.FileName = _Path;
+                    _Process.StartInfo.Arguments = _Args;
+                    _Process.StartInfo.UseShellExecute = false;
+                    _Process.StartInfo.RedirectStandardOutput = true;  // 重定向输出
+
+                    // 创建一个线程来实时读取输出数据
+                    Thread readOutputThread = new Thread(() =>
+                    {
+                        while (!_Process.StandardOutput.EndOfStream)
+                        {
+                            string? output = _Process.StandardOutput.ReadLine();
+
+                            // 处理输出数据
+                            //Console.WriteLine(output);
+                            LogOut?.Invoke(output);//丢到外部
+                                                   // 根据输出数据判断当前运行到哪一步
+                                                   // ...
+                        }
+                    });
+
+                    // 启动进程
+                    _Process.Start();
+
+                    // 启动读取输出数据的线程
+                    readOutputThread.Start();
+
+                    // 等待进程执行完成
+                    _Process.WaitForExit();
+                }
+            }
+            /// <summary>
+            /// 运行并监控应用
+            /// </summary>
+            /// <param name="Path">文件路径</param>
+            /// <param name="Args">启动信息</param>
+            /// <param name="action">信息捕获</param>
+            public static void StartAppProbes(string Path, string? Args = null, Action<string?>? action = null)
+            {
+                // 创建一个新的进程
+                Process process = new Process();
+
+                // 设置进程启动信息
+                process.StartInfo.FileName = Path;
+                process.StartInfo.Arguments = Args;
+                process.StartInfo.UseShellExecute = false;
+                process.StartInfo.RedirectStandardOutput = true;  // 重定向输出
+                // 创建一个线程来实时读取输出数据
+                Thread readOutputThread = new Thread(() =>
+                {
+                    while (true)
+                    {
+                        string? output = process.StandardOutput.ReadLine();
+
+                        // 处理输出数据
+                        //Console.WriteLine(output);
+                        action?.Invoke(output);//丢到外部
+                        // 根据输出数据判断当前运行到哪一步
+                        // ...
+                    }
+                });
+
+                // 启动进程
+                process.Start();
+
+                // 启动读取输出数据的线程
+                readOutputThread.Start();
+
+                // 等待进程执行完成
+                process.WaitForExit();
             }
         }
         /// <summary>
