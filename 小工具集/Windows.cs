@@ -1,6 +1,8 @@
-﻿using System;
-using System.Diagnostics;
+﻿using System.Diagnostics;
+using System.Drawing;
 using System.Net.NetworkInformation;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
 using SharpCompress.Archives;
 using SharpCompress.Common;
 
@@ -216,17 +218,22 @@ namespace 小工具集
             /// <param name="Path">文件路径</param>
             /// <param name="Args">启动指令</param>
             /// <param name="ExternalRuns">外部运行</param>
+            /// <param name="Hide">隐藏外部运行</param>
             /// <returns>进程</returns>
-            public static async Task<Process?> StartAppAsync(string Path, string? Args = null, bool ExternalRuns = false)
+            public static async Task<Process?> StartAppAsync(string Path, string? Args = null, bool ExternalRuns = false, bool Hide = false)
             {
                 ProcessStartInfo startInfo = new ProcessStartInfo();
                 startInfo.FileName = Path;
                 startInfo.Arguments = Args;
+                startInfo.CreateNoWindow = Hide; // 设置为 false，使应用程序显示控制台窗口
+
                 if (ExternalRuns)
                 {
-                    startInfo.CreateNoWindow = false; // 设置为 false，使应用程序显示控制台窗口
+                    startInfo.CreateNoWindow = Hide; // 设置为 false，使应用程序显示控制台窗口
                     startInfo.UseShellExecute = true; // 设置为 true，使用操作系统的外壳程序启动应用程序
                 }
+
+                startInfo.UseShellExecute = ExternalRuns; // 设置为 true，使用操作系统的外壳程序启动应用程序
                 Process? process = await Task.Run(() => Process.Start(startInfo));
                 return process;
             }
@@ -239,11 +246,94 @@ namespace 小工具集
             public static async Task<Process?> StartAppAsync(string Path, ProcessStartInfo StartInfo)
             {
                 ProcessStartInfo _StartInfo = StartInfo;
-                StartInfo.FileName = Path;
+                _StartInfo.FileName = Path;
 
-                Process? process = await Task.Run(() => Process.Start(StartInfo));
+                Process? process = await Task.Run(() => Process.Start(_StartInfo));
                 return process;
             }
+            /// <summary>
+            /// 异步运行应用
+            /// </summary>
+            /// <param name="Path">文件路径</param>
+            /// <param name="Args">启动指令</param>
+            /// <param name="StartInfo">启动信息</param>
+            /// <returns>进程</returns>
+            public static async Task<Process?> StartAppAsync(string Path, string Args, ProcessStartInfo StartInfo)
+            {
+                ProcessStartInfo _StartInfo = StartInfo;
+                _StartInfo.FileName = Path;
+                _StartInfo.Arguments = Args;
+
+                Process? process = await Task.Run(() => Process.Start(_StartInfo));
+                return process;
+            }
+            /// <summary>
+            /// 异步运行应用
+            /// </summary>
+            /// <param name="Path">文件路径</param>
+            /// <param name="Args">启动指令</param>
+            /// <returns>进程</returns>
+            public static async Task<Process?> StartAppAsyncNoShow(string Path, string? Args = null)
+            {
+                ProcessStartInfo _StartInfo = new();
+                _StartInfo.FileName = Path;
+                _StartInfo.Arguments = Args;
+
+                // 隐藏外部程序的窗口
+                _StartInfo.CreateNoWindow = true;
+                _StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+
+                // 禁用外部程序的标准输出和错误输出
+                _StartInfo.RedirectStandardOutput = true;
+                _StartInfo.RedirectStandardError = true;
+                _StartInfo.UseShellExecute = false;
+
+                Process? process = await Task.Run(() => Process.Start(_StartInfo));
+                return process;
+            }
+            /// <summary>
+            /// 异步运行应用
+            /// </summary>
+            /// <param name="Path">文件路径</param>
+            /// <param name="Args">启动指令</param>
+            /// <returns>进程</returns>
+            public static string StartAppAsyncNoShowRData(string Path, string? Args = null)
+            {
+                // 创建一个新的进程实例
+                Process process = new Process();
+
+                // 设置要运行的外部程序的路径和参数
+                process.StartInfo.FileName = Path;
+                process.StartInfo.Arguments = Args;
+
+                // 隐藏外部程序的窗口
+                process.StartInfo.CreateNoWindow = true;
+                process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+
+                // 禁用外部程序的标准输出和错误输出
+                process.StartInfo.RedirectStandardOutput = true;
+                process.StartInfo.RedirectStandardError = true;
+                process.StartInfo.UseShellExecute = false;
+
+                // 启动外部程序
+                process.Start();
+
+                // 等待外部程序完成
+                process.WaitForExit();
+
+                // 获取外部程序的输出
+                string output = process.StandardOutput.ReadToEnd();
+                //string error = process.StandardError.ReadToEnd();
+
+                // 处理输出和错误信息
+                // ...
+
+                // 关闭进程
+                process.Close();
+
+                return output;
+            }
+
             /// <summary>
             /// 运行并监控应用
             /// </summary>
@@ -416,7 +506,7 @@ namespace 小工具集
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine(ex.Message);
+                        Spectre.Console.AnsiConsole.WriteLine(ex.Message);
                         // 可以根据实际需求进行异常处理，返回更详细的错误信息给调用者
                         throw new Exception("下载文件失败：" + ex.Message);
                     }
@@ -447,7 +537,7 @@ namespace 小工具集
                     double speed = progressTracker.DownloadSpeed;
 
                     // 显示下载进度、已下载大小和下载速度
-                    Console.WriteLine($"下载进度：{percentage.ToString("0.0")}% - {GetSizeString(downloadedBytes)}/{GetSizeString(totalBytes)} - {GetSizeString((long?)speed)}/s");
+                    Spectre.Console.AnsiConsole.WriteLine($"下载进度：{percentage.ToString("0.0")}% - {GetSizeString(downloadedBytes)}/{GetSizeString(totalBytes)} - {GetSizeString((long?)speed)}/s");
                 });
 
                 // 下载文件并返回文件路径
@@ -587,6 +677,42 @@ namespace 小工具集
         public static class User
         {
 
+            /// <summary>
+            /// 获取管理员权限
+            /// </summary>
+            /// <param name="Close"></param>
+            /// <returns>是否成功</returns>
+            public static bool GetAdminMode(bool Close = true)
+            {
+#pragma warning disable CA1416 // 验证平台兼容性
+                WindowsIdentity identity = WindowsIdentity.GetCurrent();
+                WindowsPrincipal principal = new WindowsPrincipal(identity);
+
+                bool isAdmin = principal.IsInRole(WindowsBuiltInRole.Administrator);
+                if (!isAdmin)
+                {
+                    ProcessStartInfo startInfo = new ProcessStartInfo();
+                    startInfo.FileName = Path.ThisAppFilePath;
+                    startInfo.UseShellExecute = true;
+                    startInfo.Verb = "runas"; // 请求管理员权限
+
+                    try
+                    {
+                        // 启动新的进程
+                        Process.Start(startInfo);
+                    }
+                    catch (Exception ex)
+                    {
+                        // 处理异常
+                        Spectre.Console.AnsiConsole.WriteLine("无法请求管理员权限：" + ex.Message);
+                        return false;
+                    }
+                    if (Close)
+                        Environment.Exit(0);
+                }
+                return true;
+#pragma warning restore CA1416 // 验证平台兼容性
+            }
         }
         /// <summary>
         /// 文本相关
@@ -651,6 +777,151 @@ namespace 小工具集
 
                 return Math.Round(convertedValue, decimalPlaces).ToString() + " " + units[unitIndex];
             }
+            /// <summary>
+            /// 转换单位并输出时间字符串
+            /// </summary>
+            /// <param name="milliseconds">毫秒</param>
+            /// <param name="manualUnit">指定单位(未指定自动转换)</param>
+            /// <param name="decimalPlaces">小数点位数</param>
+            /// <returns>转换后的时间字符串</returns>
+            public static string ConvertTimeUnits(double milliseconds, string manualUnit = "", int decimalPlaces = 2)
+            {
+                double convertedValue = milliseconds;
+                string convertedUnit = "ms";
+
+                // 根据手动指定的单位进行转换
+                if (!string.IsNullOrEmpty(manualUnit))
+                {
+                    switch (manualUnit.ToLower())
+                    {
+                        case "s":
+                            convertedValue /= 1000;
+                            convertedUnit = "s";
+                            break;
+                        case "us":
+                            convertedValue *= 1000;
+                            convertedUnit = "us";
+                            break;
+                        case "min":
+                            convertedValue /= 60000;
+                            convertedUnit = "min";
+                            break;
+                        case "hr":
+                            convertedValue /= 3600000;
+                            convertedUnit = "hr";
+                            break;
+                        case "day":
+                            convertedValue /= 86400000;
+                            convertedUnit = "day";
+                            break;
+                        default:
+                            throw new ArgumentException("无效的单位");
+                    }
+
+                    return Math.Round(convertedValue, decimalPlaces).ToString() + " " + convertedUnit;
+                }
+
+                // 自动转换为推荐单位
+                string[] units = { "ms", "s", "us", "min", "hr", "day" };
+                int unitIndex = 0;
+                while (convertedValue >= 1 && unitIndex < units.Length - 1)
+                {
+                    convertedValue /= 1000;
+                    unitIndex++;
+                }
+
+                if (convertedValue < 0.01 && unitIndex > 0)
+                {
+                    // 当转换后的值小于 0.01 且不是最小单位时，将单位回退一个级别
+                    convertedValue *= 1000;
+                    unitIndex--;
+                }
+
+                return Math.Round(convertedValue, decimalPlaces).ToString() + " " + units[unitIndex];
+            }
+            /// <summary>
+            /// 转换单位并输出时间字中文符串
+            /// </summary>
+            /// <param name="milliseconds">毫秒</param>
+            /// <param name="manualUnit">指定单位(未指定自动转换-中文)</param>
+            /// <param name="decimalPlaces">小数点位数</param>
+            /// <returns>转换后的时间字符串</returns>
+            public static string ConvertTimeUnitsCh(double milliseconds, string manualUnit = "", int decimalPlaces = 2)
+            {
+                double convertedValue = milliseconds;
+                string convertedUnit = "毫秒";
+
+                // 根据手动指定的单位进行转换
+                if (!string.IsNullOrEmpty(manualUnit))
+                {
+                    switch (manualUnit.ToLower())
+                    {
+                        case "秒":
+                            convertedValue /= 1000;
+                            convertedUnit = "秒";
+                            break;
+                        case "微秒":
+                            convertedValue *= 1000;
+                            convertedUnit = "微秒";
+                            break;
+                        case "分钟":
+                            convertedValue /= 60000;
+                            convertedUnit = "分钟";
+                            break;
+                        case "小时":
+                            convertedValue /= 3600000;
+                            convertedUnit = "小时";
+                            break;
+                        case "天":
+                            convertedValue /= 86400000;
+                            convertedUnit = "天";
+                            break;
+                        default:
+                            throw new ArgumentException("无效的单位");
+                    }
+
+                    return Math.Round(convertedValue, decimalPlaces).ToString() + " " + convertedUnit;
+                }
+
+                // 自动转换为推荐单位
+                string[] units = { "毫秒", "秒", "微秒", "分钟", "小时", "天" };
+                int unitIndex = 0;
+                while (convertedValue >= 1 && unitIndex < units.Length - 1)
+                {
+                    convertedValue /= 1000;
+                    unitIndex++;
+                }
+
+                if (convertedValue < 0.01 && unitIndex > 0)
+                {
+                    // 当转换后的值小于 0.01 且不是最小单位时，将单位回退一个级别
+                    convertedValue *= 1000;
+                    unitIndex--;
+                }
+
+                return Math.Round(convertedValue, decimalPlaces).ToString() + " " + units[unitIndex];
+            }
+            /// <summary>
+            /// 转换时间单位并输出时间字符串
+            /// 0天 0小时 3分钟 40秒 111毫秒
+            /// </summary>
+            /// <param name="milliseconds">毫秒</param>
+            /// <returns>转换后的时间字符串</returns>
+            public static string ConvertTimeUnitsStr(double milliseconds)
+            {
+                double totalSeconds = milliseconds / 1000;
+
+                int days = (int)(totalSeconds / 86400);
+                int hours = (int)((totalSeconds % 86400) / 3600);
+                int minutes = (int)(((totalSeconds % 86400) % 3600) / 60);
+                int seconds = (int)(((totalSeconds % 86400) % 3600) % 60);
+                int ms = (int)(milliseconds % 1000);
+
+                string timeString = $"总运行时长: {days}天 {hours}小时 {minutes}分钟 {seconds}秒 {ms}毫秒";
+
+                return timeString;
+            }
+            
         }
     }
 }

@@ -27,6 +27,15 @@
 
   <ItemGroup>
     <PackageReference Include="SharpCompress" Version="0.33.0" />
+    <PackageReference Include="Spectre.Console" Version="0.47.0" />
+    <PackageReference Include="Spectre.Console.Analyzer" Version="0.47.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Spectre.Console.Cli" Version="0.47.0" />
+    <PackageReference Include="Spectre.Console.ImageSharp" Version="0.47.0" />
+    <PackageReference Include="Spectre.Console.Json" Version="0.47.0" />
+    <PackageReference Include="Spectre.Console.Testing" Version="0.47.0" />
   </ItemGroup>
 
 </Project>

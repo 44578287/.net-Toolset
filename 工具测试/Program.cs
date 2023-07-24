@@ -1,6 +1,7 @@
 ﻿using System.Net.NetworkInformation;
 using System.Runtime.CompilerServices;
 using Microsoft.VisualBasic;
+using 小工具集;
 using static 小工具集.Windows;
 using static 小工具集.Windows.File;
 
@@ -22,3 +23,4 @@ using static 小工具集.Windows.File;
 //Unzip(小工具集.Windows.Path.ThisAppPath+ "/快易享-Webp.rar", 小工具集.Windows.Path.ThisAppPath+"/A");
 //Unzip(小工具集.Windows.Path.ThisAppPath + "/快易享-Webp.rar");
 
+Windows.User.GetAdminMode();
