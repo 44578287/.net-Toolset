@@ -1,10 +1,17 @@
 ﻿using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Drawing;
 using System.Net.NetworkInformation;
+using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Security.Principal;
+using System.Text;
+using CSChaCha20;
 using SharpCompress.Archives;
 using SharpCompress.Common;
+using Standart.Hash.xxHash;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace 小工具集
 {
@@ -922,6 +929,256 @@ namespace 小工具集
                 return timeString;
             }
             
+        }
+        /// <summary>
+        /// 加密相关
+        /// </summary>
+        public static class Encrypted
+        {
+            /// <summary>
+            /// 获取文本的xxHash
+            /// </summary>
+            /// <param name="Data">文本内容</param>
+            /// <param name="Seed">种籽</param>
+            /// <returns>值</returns>
+            public static ulong GetTextxxHash(string Data, ulong Seed = 0)
+            {
+                byte[] data = Encoding.UTF8.GetBytes(Data);
+                return xxHash3.ComputeHash(data, data.Length, Seed);
+            }
+            /// <summary>
+            /// 获取文本的Guid
+            /// </summary>
+            /// <param name="Data">文本内容</param>
+            /// <param name="Seed">种籽</param>
+            /// <returns>值</returns>
+            public static Guid GetTextGuid(string Data, ulong Seed = 0)
+            {
+                byte[] data = Encoding.UTF8.GetBytes(Data);
+                return xxHash128.ComputeHash(data, data.Length, Seed).ToGuid();
+            }
+            /// <summary>
+            /// 获取文件的xxHash
+            /// </summary>
+            /// <param name="Path">文件路径</param>
+            /// <param name="Seed">种籽</param>
+            /// <returns>值</returns>
+            public static ulong GetFilexxHash(string Path, ulong Seed = 0)
+            {
+                // 使用FileStream读取文件内容并转换为byte[]
+                byte[] data;
+                using (FileStream fs = new FileStream(Path, FileMode.Open, FileAccess.Read))
+                {
+                    using (BinaryReader br = new BinaryReader(fs))
+                    {
+                        data = br.ReadBytes((int)fs.Length);
+                    }
+                }
+                return xxHash3.ComputeHash(data, data.Length, Seed);
+            }
+            /// <summary>
+            /// 获取文件的Guid
+            /// </summary>
+            /// <param name="Path">文件路径</param>
+            /// <param name="Seed">种籽</param>
+            /// <returns>值</returns>
+            public static Guid GetFileGuid(string Path, ulong Seed = 0)
+            {
+                // 使用FileStream读取文件内容并转换为byte[]
+                byte[] data;
+                using (FileStream fs = new FileStream(Path, FileMode.Open, FileAccess.Read))
+                {
+                    using (BinaryReader br = new BinaryReader(fs))
+                    {
+                        data = br.ReadBytes((int)fs.Length);
+                    }
+                }
+                return xxHash128.ComputeHash(data, data.Length, Seed).ToGuid();
+            }
+            /// <summary>
+            /// 加密文本
+            /// </summary>
+            /// <param name="Data">文本内容</param>
+            /// <param name="Key">密钥</param>
+            /// <param name="Nonce">一次性密钥</param>
+            /// <param name="Counter">计数器</param>
+            /// <returns>加密文本</returns>
+            public static string EncryptedText(string Data, byte[] Key,out byte[] Nonce, uint Counter = 1)
+            {
+                Nonce = GenerateRandomKey(12);//若没指定则自动生成一次性密钥
+                byte[] data = Encoding.UTF8.GetBytes(Data);
+                ChaCha20 Encrypting = new ChaCha20(Key, Nonce, Counter);
+                byte[] reData = new byte[data.Length];
+                Encrypting.EncryptBytes(reData, data);
+                return Convert.ToBase64String(reData);
+            }
+            /// <summary>
+            /// 解密文本
+            /// </summary>
+            /// <param name="Data">加密内容</param>
+            /// <param name="Key">密钥</param>
+            /// <param name="Nonce">一次性密钥</param>
+            /// <param name="Counter">计数器</param>
+            /// <returns>原文</returns>
+            public static string DeclassifyText(string Data, byte[] Key, byte[] Nonce, uint Counter = 1)
+            {
+                byte[] data = Convert.FromBase64String(Data);
+                ChaCha20 Decrypting = new ChaCha20(Key, Nonce, Counter);
+                byte[] reData = new byte[data.Length];
+                Decrypting.DecryptBytes(reData, data);
+                return Encoding.UTF8.GetString(reData);
+            }
+            /// <summary>
+            /// 加密文件
+            /// </summary>
+            /// <param name="filePath">文件路径</param>
+            /// <param name="encryptedFilePath">加密后的文件路径</param>
+            /// <param name="key">密钥</param>
+            /// <param name="nonce">一次性密钥</param>
+            /// <param name="counter">计数器</param>
+            /// <param name="chunking">分块</param>
+            public static void EncryptFile(string filePath, string encryptedFilePath, byte[] key, out byte[] nonce, uint counter = 1,int chunking = 1024)
+            {
+                nonce = GenerateRandomKey(12); // 若没指定则自动生成一次性密钥
+
+                using (var inputStream = System.IO.File.OpenRead(filePath))
+                using (var outputStream = System.IO.File.Create(encryptedFilePath))
+                {
+                    ChaCha20 Encrypt = new ChaCha20(key, nonce, counter);
+                    Encrypt.EncryptStream(outputStream, inputStream, chunking);
+                }
+                
+            }
+            /// <summary>
+            /// 解密文件
+            /// </summary>
+            /// <param name="encryptedFilePath">加密文件路径</param>
+            /// <param name="decryptedFilePath">解密后的文件路径</param>
+            /// <param name="key">密钥</param>
+            /// <param name="nonce">一次性密钥</param>
+            /// <param name="counter">计数器</param>
+            /// <param name="chunking">分块</param>
+            public static void DecryptFile(string encryptedFilePath, string decryptedFilePath, byte[] key, byte[] nonce, uint counter = 1, int chunking = 1024)
+            {
+                using (var inputStream = System.IO.File.OpenRead(encryptedFilePath))
+                using (var outputStream = System.IO.File.Create(decryptedFilePath))
+                {
+                    ChaCha20 Decrypting = new ChaCha20(key, nonce, counter);
+                    Decrypting.DecryptStream(outputStream, inputStream, chunking);
+                }
+            }
+            /// <summary>
+            /// 异步加密文件
+            /// </summary>
+            /// <param name="filePath">文件路径</param>
+            /// <param name="encryptedFilePath">加密后的文件路径</param>
+            /// <param name="key">密钥</param>
+            /// <param name="counter">计数器</param>
+            /// <param name="chunking">分块</param>
+            /// <returns>一次性密钥</returns>
+            public static async Task<byte[]> EncryptFileAsync(string filePath, string encryptedFilePath, byte[] key, uint counter = 1, int chunking = 1024)
+            {
+                byte[] nonce = GenerateRandomKey(12); // 若没指定则自动生成一次性密钥
+
+                using (var inputStream = System.IO.File.OpenRead(filePath))
+                using (var outputStream = System.IO.File.Create(encryptedFilePath))
+                {
+                    ChaCha20 Encrypt = new ChaCha20(key, nonce, counter);
+                    await Encrypt.EncryptStreamAsync(outputStream, inputStream, chunking);
+                }
+                return nonce;
+            }
+            /// <summary>
+            /// 异步解密文件
+            /// </summary>
+            /// <param name="encryptedFilePath">加密文件路径</param>
+            /// <param name="decryptedFilePath">解密后的文件路径</param>
+            /// <param name="key">密钥</param>
+            /// <param name="nonce">一次性密钥</param>
+            /// <param name="counter">计数器</param>
+            /// <param name="chunking">分块</param>
+            public static async Task DecryptFileAsync(string encryptedFilePath, string decryptedFilePath, byte[] key, byte[] nonce, uint counter = 1, int chunking = 1024)
+            {
+                using (var inputStream = System.IO.File.OpenRead(encryptedFilePath))
+                using (var outputStream = System.IO.File.Create(decryptedFilePath))
+                {
+                    ChaCha20 Decrypting = new ChaCha20(key, nonce, counter);
+                    await Decrypting.DecryptStreamAsync(outputStream, inputStream, chunking);
+                }
+            }
+
+
+            /// <summary>
+            /// 生成指定位数密钥
+            /// </summary>
+            /// <param name="sizeInBytes">Byte数(要/8)</param>
+            /// <returns>密钥byte[]</returns>
+            public static byte[] GenerateRandomKey(int sizeInBytes)
+            {
+                byte[] key = new byte[sizeInBytes];
+                using (RandomNumberGenerator rng = RandomNumberGenerator.Create())
+                {
+                    rng.GetBytes(key);
+                }
+                return key;
+            }
+            /// <summary>
+            /// 将密钥转成字符串(十六进制)
+            /// </summary>
+            /// <param name="key">密钥</param>
+            /// <returns>密钥字符串</returns>
+            public static string KeyToStringHex(byte[] key)
+            {
+                StringBuilder reData = new StringBuilder();
+                foreach (byte b in key)
+                {
+                    reData.AppendFormat("{0:X2} ", b);
+                }
+                return reData.ToString().TrimEnd();
+            }
+            /// <summary>
+            /// 将密钥转成字符串(Base64)
+            /// </summary>
+            /// <param name="key">密钥</param>
+            /// <returns>密钥字符串</returns>
+            public static string KeyToStringBase64(byte[] key)
+            {
+                return Convert.ToBase64String(key);
+            }
+            /// <summary>
+            /// 将字符串转换回密钥(Base64)
+            /// </summary>
+            /// <param name="keyAsString">密钥字符串</param>
+            /// <returns>密钥</returns>
+            public static byte[] StringToKeyBase64(string keyAsString)
+            {
+                return Convert.FromBase64String(keyAsString);
+            }
+            /// <summary>
+            /// 将字符串转换回密钥(十六进制)
+            /// </summary>
+            /// <param name="keyAsString">密钥字符串</param>
+            /// <returns>密钥</returns>
+            public static byte[] StringToKeyHex(string keyAsString)
+            {
+                bool hasSpaces = keyAsString.Contains(" ");
+
+                if (hasSpaces)
+                {
+                    keyAsString = keyAsString.Replace(" ", "");
+                }
+
+                int keySizeInBytes = keyAsString.Length / 2;
+                byte[] key = new byte[keySizeInBytes];
+
+                for (int i = 0; i < keySizeInBytes; i++)
+                {
+                    string byteString = keyAsString.Substring(i * 2, 2);
+                    key[i] = byte.Parse(byteString, System.Globalization.NumberStyles.HexNumber);
+                }
+
+                return key;
+            }
         }
     }
 }
