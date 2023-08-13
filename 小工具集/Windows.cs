@@ -1,17 +1,18 @@
-﻿using System.Diagnostics;
-using System.Diagnostics.Metrics;
-using System.Drawing;
+﻿using System.ComponentModel;
+using System.Data;
+using System.Data.SQLite;
+using System.Diagnostics;
 using System.Net.NetworkInformation;
-using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
 using CSChaCha20;
+using LoongEgg.LoongLogger;
 using SharpCompress.Archives;
 using SharpCompress.Common;
 using Standart.Hash.xxHash;
-using static System.Runtime.InteropServices.JavaScript.JSType;
+using static 小工具集.Windows.Code;
+using static 小工具集.Windows.Network.HttpEnum;
 
 namespace 小工具集
 {
@@ -617,6 +618,194 @@ namespace 小工具集
                 }
             }
 
+            /// <summary>
+            /// Http请求
+            /// </summary>
+            public static class HttpRequest
+            {
+                /// <summary>
+                /// 发送请求
+                /// </summary>
+                /// <param name="Uri">地址</param>
+                /// <param name="Data">发送数据</param>
+                /// <param name="HttpMode">请求模式</param>
+                /// <param name="SendDataType">发送目标内容</param>
+                /// <param name="HeaderType">发送请求头设置</param>
+                /// <returns>Http响应</returns>
+                /// <exception cref="Exception">WTF</exception>
+                public static async Task<HttpResponseMessage> Send(Uri Uri, object? Data = null, HttpMode HttpMode = HttpMode.GET, SendDataType SendDataType = SendDataType.String, HeaderType HeaderType = HeaderType.Text)
+                {
+                    // 创建HttpClient实例
+                    using var client = new HttpClient();
+                    HttpResponseMessage response;
+                    object? content = null;
+                    //设置请求头发送数据类型
+                    if (Data != null || HttpMode != HttpMode.GET)
+                    {
+                        try
+                        {
+                            switch (SendDataType)
+                            {
+                                case SendDataType.String:
+                                    // 设置要发送的JSON数据
+                                    HeaderType = HeaderType.Text;
+                                    content = new StringContent((string)Data!, Encoding.UTF8, HeaderType.GetDescription());
+                                    break;
+                                case SendDataType.Json:
+                                    HeaderType = HeaderType.Json;
+                                    content = new StringContent((string)Data!, Encoding.UTF8, HeaderType.GetDescription());
+                                    break;
+                                case SendDataType.File_Bytes:
+                                    HeaderType = HeaderType.Stream;
+                                    content = new ByteArrayContent((byte[])Data!);
+                                    break;
+                                case SendDataType.File_Stream:
+                                    HeaderType = HeaderType.Stream;
+                                    content = new StreamContent((Stream)Data!);
+                                    break;
+                                case SendDataType.File_Path:
+                                    HeaderType = HeaderType.Stream;
+                                    FileStream fileStream = System.IO.File.OpenRead((string)Data!);
+                                    content = new StreamContent(fileStream);
+                                    // 设置Content-Disposition头部，指定文件名
+                                    client.DefaultRequestHeaders.Add("Content-Disposition", $"attachment; filename=\"{System.IO.Path.GetFileName(Data as string)}\"");
+                                    break;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Spectre.Console.AnsiConsole.WriteLine($"Error----{ex.Message}-----大概率是Data传值类型错了");
+                        }
+                        //设置请求头发送数据类型
+                        //client.DefaultRequestHeaders.Accept.Clear();
+                        client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue(HeaderType.GetDescription()));
+                    }
+                    //选择发送模式
+                    switch (HttpMode)
+                    {
+                        case HttpMode.GET:
+                            response = await client.GetAsync(Uri);
+                            break;
+                        case HttpMode.POST:
+                            response = await client.PostAsync(Uri, ConvertObj(content!, AsType(SendDataType)!));
+                            break;
+                        case HttpMode.PUT:
+                            response = await client.PutAsync(Uri, ConvertObj(content!, AsType(SendDataType)!));
+                            break;
+                        case HttpMode.DELETE:
+                            response = await client.DeleteAsync(Uri);
+                            break;
+                        default: throw new Exception("大哥牛皮无中生有");
+                    }
+                    return response;
+                }
+                /// <summary>
+                /// 通过类型指定输出对象类型
+                /// </summary>
+                /// <param name="SendDataType">指定类型</param>
+                /// <returns>该对象转换后类型</returns>
+                private static Type AsType(SendDataType SendDataType)
+                {
+                    switch (SendDataType)
+                    {
+                        case SendDataType.String: return typeof(StringContent);
+                        case SendDataType.Json: return typeof(StringContent);
+                        case SendDataType.File_Bytes: return typeof(byte[]);
+                        case SendDataType.File_Stream: return typeof(Stream);
+                    }
+                    return typeof(object);
+                }
+            }
+            /// <summary>
+            /// 跟Http有关的枚举
+            /// </summary>
+            public static class HttpEnum
+            {
+                /// <summary>
+                /// Http请求模式
+                /// </summary>
+                public enum HttpMode
+                {
+                    /// <summary>
+                    /// GET请求
+                    /// </summary>
+                    GET,
+                    /// <summary>
+                    /// POST请求
+                    /// </summary>
+                    POST,
+                    /// <summary>
+                    /// PUT请求
+                    /// </summary>
+                    PUT,
+                    /// <summary>
+                    /// DELETE请求
+                    /// </summary>
+                    DELETE
+                }
+                /// <summary>
+                /// 发送内容类型
+                /// </summary>
+                public enum SendDataType
+                {
+                    /// <summary>
+                    /// 字符串
+                    /// </summary>
+                    String,
+                    /// <summary>
+                    /// Json
+                    /// </summary>
+                    Json,
+                    /// <summary>
+                    /// 文件流
+                    /// </summary>
+                    File_Stream,
+                    /// <summary>
+                    /// 文件Bytes
+                    /// </summary>
+                    File_Bytes,
+                    /// <summary>
+                    /// 文件路径
+                    /// </summary>
+                    File_Path
+                }
+                /// <summary>
+                /// 请求头类型
+                /// </summary>
+                public enum HeaderType
+                {
+                    /// <summary>
+                    /// application/json
+                    /// </summary>
+                    [Description("application/json")]
+                    Json,
+                    /// <summary>
+                    /// text/plain
+                    /// </summary>
+                    [Description("text/plain")]
+                    Text,
+                    /// <summary>
+                    /// text/xml
+                    /// </summary>
+                    [Description("text/xml")]
+                    Xml,
+                    /// <summary>
+                    /// text/html
+                    /// </summary>
+                    [Description("text/html")]
+                    Html,
+                    /// <summary>
+                    /// application/octet-stream
+                    /// </summary>
+                    [Description("application/octet-stream")]
+                    Stream,
+                    /// <summary>
+                    /// application/x-www-form-urlencoded
+                    /// </summary>
+                    [Description("application/x-www-form-urlencoded")]
+                    Form,
+                }
+            }
 
             /// <summary>
             /// 获取所有网卡的IP
@@ -727,7 +916,7 @@ namespace 小工具集
         public static class Text
         {
             /// <summary>
-            /// 自动转换单位
+            /// 自动转换文件大小单位
             /// </summary>
             /// <param name="bytes">字节</param>
             /// <param name="manualUnit">指定单位(未指定自动转换)</param>
@@ -928,7 +1117,7 @@ namespace 小工具集
 
                 return timeString;
             }
-            
+
         }
         /// <summary>
         /// 加密相关
@@ -1003,7 +1192,7 @@ namespace 小工具集
             /// <param name="Nonce">一次性密钥</param>
             /// <param name="Counter">计数器</param>
             /// <returns>加密文本</returns>
-            public static string EncryptedText(string Data, byte[] Key,out byte[] Nonce, uint Counter = 1)
+            public static string EncryptedText(string Data, byte[] Key, out byte[] Nonce, uint Counter = 1)
             {
                 Nonce = GenerateRandomKey(12);//若没指定则自动生成一次性密钥
                 byte[] data = Encoding.UTF8.GetBytes(Data);
@@ -1037,7 +1226,7 @@ namespace 小工具集
             /// <param name="nonce">一次性密钥</param>
             /// <param name="counter">计数器</param>
             /// <param name="chunking">分块</param>
-            public static void EncryptFile(string filePath, string encryptedFilePath, byte[] key, out byte[] nonce, uint counter = 1,int chunking = 1024)
+            public static void EncryptFile(string filePath, string encryptedFilePath, byte[] key, out byte[] nonce, uint counter = 1, int chunking = 1024)
             {
                 nonce = GenerateRandomKey(12); // 若没指定则自动生成一次性密钥
 
@@ -1047,7 +1236,7 @@ namespace 小工具集
                     ChaCha20 Encrypt = new ChaCha20(key, nonce, counter);
                     Encrypt.EncryptStream(outputStream, inputStream, chunking);
                 }
-                
+
             }
             /// <summary>
             /// 解密文件
@@ -1179,6 +1368,219 @@ namespace 小工具集
 
                 return key;
             }
+        }
+        /// <summary>
+        /// 代码相关
+        /// </summary>
+        public static class Code
+        {
+            /// <summary>
+            /// 将OBJ转换成指定类型
+            /// </summary>
+            /// <param name="Data">OBJ内容</param>
+            /// <param name="Type">指定类型</param>
+            /// <returns>转换成指定类型后的内容</returns>
+            public static dynamic ConvertObj(object Data, Type Type)
+            {
+                return Convert.ChangeType(Data, Type);
+            }
+        }
+        /// <summary>
+        /// SQL相关
+        /// </summary>
+        public static class SQL
+        {
+            /// <summary>
+            /// SQLit操作类
+            /// </summary>
+            public class SQLite
+            {
+
+                /// <summary>
+                /// 连接信息
+                /// </summary>
+                public ConnData _ConnData { get; }
+                /// <summary>
+                /// 连接字符串
+                /// </summary>
+                public string _ConnStr { get; }
+                /// <summary>
+                /// 连接
+                /// </summary>
+                public SQLiteConnection _Conn { get; }
+                /// <summary>
+                /// 初始化
+                /// </summary>
+                /// <param name="ConnData">连接信息</param>
+                /// <exception cref="InvalidOperationException"></exception>
+                public SQLite(ConnData ConnData)
+                {
+                    Logger.WriteDebug($"初始化数据库 位置:{ConnData.dbPath}");
+                    _ConnData = ConnData;
+                    _ConnStr = ConnData.dbPath;
+                    if (NewDbFile(_ConnData.dbPath) == null)
+                    {
+                        Logger.WriteError($"初始化(创建)数据库失败!");
+                        throw new InvalidOperationException("初始化(创建)数据库失败!");
+                    }
+                    _Conn = new SQLiteConnection("data source=" + _ConnData.dbPath);
+                    Logger.WriteInfor($"初始化数据库完成 位置:{ConnData.dbPath}");
+                    ConneTest();
+                }
+                /// <summary>
+                /// 新建数据库文件
+                /// </summary>
+                /// <param name="dbPath">数据库文件路径及名称</param>
+                /// <returns>新建成功，返回db路径，否则返回null</returns>
+                static public string? NewDbFile(string dbPath)
+                {
+                    Logger.WriteDebug("执行创建数据库 位置:" + System.IO.Path.GetFullPath(dbPath));
+                    if (!System.IO.File.Exists(dbPath))
+                    {
+                        Logger.WriteInfor("未在:" + System.IO.Path.GetFullPath(dbPath) + " 找到数据库即将执行创建");
+                        try
+                        {
+                            SQLiteConnection.CreateFile(dbPath);
+                            Logger.WriteInfor("创建成功!位置:" + System.IO.Path.GetFullPath(dbPath));
+                            return dbPath;
+                        }
+                        catch (Exception Message)
+                        {
+                            Logger.WriteError("错误!" + Message);
+                            return null;
+                        }
+                    }
+                    Logger.WriteInfor("数据库存在!位置:" + System.IO.Path.GetFullPath(dbPath));
+                    return dbPath;
+                }
+                /// <summary>
+                /// 数据库连接测试
+                /// </summary>
+                /// <returns>初始化成功OR失败</returns>
+                public bool ConneTest()
+                {
+                    try
+                    {
+                        _Conn.Open();
+                    }
+                    catch
+                    {
+                        Logger.WriteError("数据库连接失败!");
+                        return false;
+                    }
+                    finally 
+                    {
+                        _Conn.Cancel();
+                        _Conn.Close();
+                    }
+                    Logger.WriteInfor("数据库连接成功!");
+                    return true;
+                }
+
+                /// <summary>
+                /// Sql命令执行
+                /// </summary>
+                /// <param name="Sql">Sql命令</param>
+                /// <returns>执行结果</returns>
+                public SQLiteCommand? Command(string Sql)
+                {
+                    SQLiteCommand Cmd;
+                    try
+                    {
+                        Cmd = new(Sql, _Conn);
+                        Logger.WriteDebug($"执行命令成功! 影响行数:{Cmd.ExecuteNonQuery()} 命令:{Sql}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteError($"执行命令失败! 因为: {ex.Message} 命令:{Sql}");
+                        return null;
+                    }
+                    return Cmd;
+                }
+                /// <summary>
+                /// Sql命令执行(单次)
+                /// </summary>
+                /// <param name="Sql">Sql命令</param>
+                /// <returns>执行结果</returns>
+                public SQLiteCommand? CommandSingle(string Sql)
+                {
+                    SQLiteCommand Cmd;
+                    try
+                    {
+                        Open();
+                        Cmd = new(Sql, _Conn);
+                        Logger.WriteDebug($"执行命令成功! 影响行数:{Cmd.ExecuteNonQuery()} 命令:{Sql}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteError($"执行命令失败! 因为: {ex.Message} 命令:{Sql}");
+                        return null;
+                    }
+                    finally
+                    {
+                        Close();
+                    }
+                    return Cmd;
+                }
+
+
+                /// <summary>
+                /// 打开连接
+                /// </summary>
+                public bool Open()
+                {
+                    try
+                    {
+                        _Conn.Open();
+                    }
+                    catch (Exception ex)//报错处理
+                    {
+                        //Console.WriteLine(ex.Message);
+                        Logger.WriteError(ex.Message);
+                        return false;
+                    }
+                    return true;
+                }
+                /// <summary>
+                /// 关闭连接
+                /// </summary>
+                public void Close()
+                {
+                    _Conn.Close();
+                }
+                /// <summary>
+                /// 获取状态
+                /// </summary>
+                /// <returns>状态</returns>
+                public ConnectionState Status()
+                {
+                    return _Conn.State;
+                }
+
+                /// <summary>
+                /// 连接信息
+                /// </summary>
+                public class ConnData
+                {
+                    /// <summary>
+                    /// 数据库路径
+                    /// </summary>
+                    public string dbPath { get; set; } = "db.db";
+                }
+            }
+        }
+
+        /// <summary>
+        /// 获取枚举描述
+        /// </summary>
+        /// <param name="enumValue">枚举值</param>
+        /// <returns>枚举叙述</returns>
+        public static string GetDescription(this Enum enumValue)
+        {
+            var field = enumValue.GetType().GetField(enumValue.ToString());
+            var attributes = field?.GetCustomAttributes(typeof(DescriptionAttribute), false) as DescriptionAttribute[];
+
+            return attributes != null && attributes.Length > 0 ? attributes[0].Description : enumValue.ToString();
         }
     }
 }

@@ -2,6 +2,9 @@
 using CSChaCha20;
 using System.Text;
 using System.Xml.Linq;
+using 小工具集;
+using static 小工具集.Windows.Network.HttpRequest;
+using static 小工具集.Windows.Network.HttpEnum;
 
 //Console.WriteLine(LnkToPath(@"C:\Users\g9964\Desktop\阿里巴巴DNS检测工具.lnk"));
 /*foreach (var Data in GetStartMenuAppArray()!)
@@ -24,7 +27,9 @@ using System.Xml.Linq;
 //Windows.User.GetAdminMode();
 
 //Console.WriteLine(小工具集.Windows.Encrypted.GetTextGuid(@"C:\Users\g9964\Downloads\SW_DVD9_Win_Server_STD_CORE_2022_2108.17_64Bit_ChnSimp_DC_STD_MLF_X23-35655.ISO"));
-
+//Console.WriteLine(小工具集.Windows.Encrypted.GetFilexxHash(@"C:\Users\g9964\Desktop\1\1.txt"));
+//Console.WriteLine(小工具集.Windows.Encrypted.GetFilexxHash(@"C:\Users\g9964\Desktop\1 - 副本.txt"));
+/*
 //string data = "你好";
 string data = @"C:\Users\g9964\Downloads\virtio-win-0.1.229.iso";
 //string data = @"C:\Users\g9964\Desktop\1.txt";
@@ -42,7 +47,7 @@ Console.WriteLine("一次密钥: " + 小工具集.Windows.Encrypted.KeyToStringB
 //string Edata = 小工具集.Windows.Encrypted.DeclassifyText(edata, 小工具集.Windows.Encrypted.StringToKeyBase64(Key), Skey);
 //Console.WriteLine("原文: "+ Edata);
 //小工具集.Windows.Encrypted.DecryptFile(data + "E",data+"D", key,Skey);
-
+*/
 /*
 byte[] mySimpleTextAsBytes = Encoding.UTF8.GetBytes("你好");
 
@@ -63,3 +68,18 @@ ChaCha20 forDecrypting = new ChaCha20(key, nonce, counter);
 byte[] decryptedContent = new byte[encryptedContent.Length];
 forDecrypting.DecryptBytes(decryptedContent, Tempb);
 Console.WriteLine(Encoding.UTF8.GetString(decryptedContent));*/
+var response = await Send(new("http://127.0.0.1:5250/API/GetUserListData"), "{\r\n  \"object\": \"ID\",\r\n  \"conditions\": \"2\"\r\n}", HttpMode:HttpMode.POST,SendDataType: SendDataType.Json);
+// 检查响应是否成功
+if (response.IsSuccessStatusCode)
+{
+    // 读取响应内容
+    var responseContent = await response.Content.ReadAsStringAsync();
+    Console.WriteLine(responseContent);
+}
+else
+{
+    Console.WriteLine("请求失败，状态码：" + response.StatusCode);
+}
+/*using var client = new HttpClient();
+var Data = await client.GetAsync("https://www.google.com");
+Console.WriteLine(await Data.Content.ReadAsStringAsync());*/
