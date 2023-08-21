@@ -1,10 +1,8 @@
-﻿using System.Security.Cryptography;
-using CSChaCha20;
-using System.Text;
+﻿using System.Data.SQLite;
+using System.Diagnostics;
+using System.Threading.Tasks;
 using System.Xml.Linq;
-using 小工具集;
-using static 小工具集.Windows.Network.HttpRequest;
-using static 小工具集.Windows.Network.HttpEnum;
+using static 小工具集.Windows.SQL;
 
 //Console.WriteLine(LnkToPath(@"C:\Users\g9964\Desktop\阿里巴巴DNS检测工具.lnk"));
 /*foreach (var Data in GetStartMenuAppArray()!)
@@ -68,7 +66,7 @@ ChaCha20 forDecrypting = new ChaCha20(key, nonce, counter);
 byte[] decryptedContent = new byte[encryptedContent.Length];
 forDecrypting.DecryptBytes(decryptedContent, Tempb);
 Console.WriteLine(Encoding.UTF8.GetString(decryptedContent));*/
-var response = await Send(new("http://127.0.0.1:5250/API/GetUserListData"), "{\r\n  \"object\": \"ID\",\r\n  \"conditions\": \"2\"\r\n}", HttpMode:HttpMode.POST,SendDataType: SendDataType.Json);
+/*var response = await Send(new("http://127.0.0.1:5250/API/GetUserListData"), "{\r\n  \"object\": \"ID\",\r\n  \"conditions\": \"2\"\r\n}", HttpMode:HttpMode.POST,SendDataType: SendDataType.Json);
 // 检查响应是否成功
 if (response.IsSuccessStatusCode)
 {
@@ -79,7 +77,66 @@ if (response.IsSuccessStatusCode)
 else
 {
     Console.WriteLine("请求失败，状态码：" + response.StatusCode);
-}
+}*/
 /*using var client = new HttpClient();
 var Data = await client.GetAsync("https://www.google.com");
 Console.WriteLine(await Data.Content.ReadAsStringAsync());*/
+
+SQLite SQLite = new(new(), 2000);
+//Console.WriteLine(SQLite.ConneTest());
+//Console.WriteLine(SQLite.Open());
+/*SQLite.CreateTable("user", new[]
+                    {
+                        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT",
+                        "account TEXT NOT NULL",
+                        "name TEXT",
+                        "pwd TEXT",
+                        "mail TEXT",
+                        "ug INTEGER",
+                        "config TEXT",
+                        "state TEXT",
+                        "time INTEGER",
+                        //"FOREIGN KEY (ug) REFERENCES ug (id)"
+                    });*/
+//var Conn = SQLite.Open();
+//SQLite.Command(@"SELECT name FROM sqlite_master WHERE type='table' AND name='user';", Conn)?.ExecuteReader();
+SQLiteCommand Cmd;
+Stopwatch stopwatch = new Stopwatch();
+
+//SQLiteConnection Conn = SQLite.Open();
+//Task A = new Task(() => Test());
+List<Task> AA = new List<Task>();
+for (int i = 0; i < 5; i++)
+{
+    AA.Add(new(() => Test()));
+}
+stopwatch.Start();
+foreach (var task in AA)
+{
+    task.Start();
+}
+Task.WaitAll(AA.ToArray());
+
+//SQLite.Close(Conn);
+stopwatch.Stop();
+TimeSpan elapsedTime = stopwatch.Elapsed;
+Console.WriteLine($"代码执行时长：{elapsedTime.TotalMilliseconds} 毫秒");
+//SQLite.Close(Conn);
+
+
+void Test()
+{
+    for (int i = 0; i <= 1000; i++)
+    {
+        SQLiteConnection Conn = SQLite.Open();
+        //using (SQLiteConnection Conn = SQLite.Open())
+        {
+            Cmd = new SQLiteCommand("SELECT * FROM main.user WHERE name = 'img_774577.jpg';", Conn);
+            //Cmd.ExecuteReader();
+            //Cmd.ExecuteNonQuery();
+            Console.WriteLine(Cmd.ExecuteNonQuery());
+        }
+        SQLite.Close(Conn);
+        //Conn.Close();
+    }
+}
