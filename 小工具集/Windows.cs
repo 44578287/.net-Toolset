@@ -10,6 +10,7 @@ using CSChaCha20;
 using LoongEgg.LoongLogger;
 using SharpCompress.Archives;
 using SharpCompress.Common;
+using Spectre.Console;
 using Standart.Hash.xxHash;
 using static 小工具集.Windows.Code;
 using static 小工具集.Windows.Network.HttpEnum;
@@ -1326,6 +1327,20 @@ namespace 小工具集
                 return reData.ToString().TrimEnd();
             }
             /// <summary>
+            /// 将密钥转成字符串(十六进制)没有美化
+            /// </summary>
+            /// <param name="key">密钥</param>
+            /// <returns>密钥字符串</returns>
+            public static string KeyToStringHexNoFormat(byte[] key)
+            {
+                StringBuilder reData = new StringBuilder();
+                foreach (byte b in key)
+                {
+                    reData.AppendFormat("{0:X2}", b);
+                }
+                return reData.ToString().TrimEnd();
+            }
+            /// <summary>
             /// 将密钥转成字符串(Base64)
             /// </summary>
             /// <param name="key">密钥</param>
@@ -1368,6 +1383,8 @@ namespace 小工具集
 
                 return key;
             }
+
+
         }
         /// <summary>
         /// 代码相关
@@ -1390,6 +1407,7 @@ namespace 小工具集
         /// </summary>
         public static class SQL
         {
+
             /// <summary>
             /// SQLit操作类
             /// </summary>
@@ -1468,7 +1486,7 @@ namespace 小工具集
                         Logger.WriteError("数据库连接失败!");
                         return false;
                     }
-                    finally 
+                    finally
                     {
                         _Conn.Cancel();
                         _Conn.Close();
@@ -1523,6 +1541,512 @@ namespace 小工具集
                     return Cmd;
                 }
 
+                /// <summary>
+                /// 备份数据库到指定路径。
+                /// </summary>
+                /// <param name="backupPath">备份文件的路径。</param>
+                public void BackupDatabase(string backupPath)
+                {
+                    Logger.WriteInfor($"备份数据库至:{backupPath}");
+                    try
+                    {
+                        if (System.IO.File.Exists(_ConnStr))
+                        {
+                            System.IO.File.Copy(_ConnStr, backupPath, true);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteError($"备份数据库时出错!因为:{ex.Message}");
+                        throw;
+                    }
+                }
+
+                /// <summary>
+                /// 还原数据库从指定的备份文件。
+                /// </summary>
+                /// <param name="backupPath">备份文件的路径。</param>
+                public void RestoreDatabase(string backupPath)
+                {
+                    Logger.WriteInfor($"还原数据库:{backupPath}");
+                    try
+                    {
+                        if (System.IO.File.Exists(backupPath))
+                        {
+                            System.IO.File.Copy(backupPath, _ConnStr, true);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteError($"还原数据库时出错!因为:{ex.Message}");
+                        throw;
+                    }
+                }
+
+                /// <summary>
+                /// 向指定表中插入数据。
+                /// </summary>
+                /// <param name="tableName">要插入数据的表名。</param>
+                /// <param name="columns">要插入的列名数组。</param>
+                /// <param name="values">对应的值数组。</param>
+                /// <exception cref="ArgumentException">当列数与值数不匹配时引发。</exception>
+                public void InsertData(string tableName, string[] columns, object[] values)
+                {
+                    Logger.WriteDebug($"插入表'{tableName}' 插入项目{string.Join(",", columns)}");
+                    try
+                    {
+                        if (columns.Length != values.Length)
+                        {
+                            throw new ArgumentException("列数与值数必须相等。");
+                        }
+
+                        using (SQLiteCommand command = _Conn.CreateCommand())
+                        {
+                            command.CommandText = GenerateInsertQuery(tableName, columns);
+
+                            for (int i = 0; i < columns.Length; i++)
+                            {
+                                command.Parameters.AddWithValue($"@{columns[i]}", values[i]);
+                            }
+
+                            command.ExecuteNonQuery();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteError($"插入数据时出错!因为:{ex.Message}");
+                        throw; // 将异常继续抛出
+                    }
+                }
+
+                /// <summary>
+                /// 执行批量插入操作，向指定表中插入多行数据。
+                /// </summary>
+                /// <param name="tableName">要插入数据的表名。</param>
+                /// <param name="columns">要插入的列名数组。</param>
+                /// <param name="batchValues">包含多个数据行的批量值列表。</param>
+                /// <exception cref="ArgumentException">当列数和批量值为空，或批量值的列数与指定列数不匹配时引发。</exception>
+                public void BulkInsertData(string tableName, string[] columns, List<object[]> batchValues)
+                {
+                    Logger.WriteDebug($"批量插入表'{tableName}' 插入项目{string.Join(",", columns)} 插入数量{batchValues.Count}");
+                    try
+                    {
+                        if (columns.Length == 0 || batchValues.Count == 0)
+                        {
+                            throw new ArgumentException("列数和批量值不能为空。");
+                        }
+
+                        using (SQLiteCommand command = _Conn.CreateCommand())
+                        {
+                            string insertQuery = GenerateInsertQuery(tableName, columns);
+
+                            List<int> mismatchedRows = new List<int>();
+
+                            for (int i = 0; i < batchValues.Count; i++)
+                            {
+                                object[] values = batchValues[i];
+
+                                if (values.Length != columns.Length)
+                                {
+                                    mismatchedRows.Add(i + 1);
+                                }
+                                else
+                                {
+                                    string parameterNames = string.Join(", ", columns.Select((_, index) => $"@{columns[index]}_{i}"));
+
+                                    string valuesQuery = string.Join(", ", parameterNames.Split(',').Select((_, index) => $"@{columns[index]}_{i}"));
+
+                                    string fullInsertQuery = $"{insertQuery} VALUES ({valuesQuery})";
+
+                                    command.CommandText = fullInsertQuery;
+
+                                    for (int j = 0; j < columns.Length; j++)
+                                    {
+                                        command.Parameters.AddWithValue($"@{columns[j]}_{i}", values[j]);
+                                    }
+
+                                    command.ExecuteNonQuery();
+                                }
+                            }
+
+                            if (mismatchedRows.Count > 0)
+                            {
+                                string errorDetails = string.Join(", ", mismatchedRows.Select(row => $"第 {row} 行"));
+                                throw new ArgumentException($"批量插入时出错，{errorDetails}的列数与值数不匹配。");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteError($"批量插入数据时出错!因为:{ex.Message}");
+                        throw; // 将异常继续抛出
+                    }
+                }
+
+                /// <summary>
+                /// 生成用于插入数据的SQLite查询语句。
+                /// </summary>
+                /// <param name="tableName">要插入数据的表名。</param>
+                /// <param name="columns">要插入的列名数组。</param>
+                /// <returns>生成的SQLite查询语句。</returns>
+                private string GenerateInsertQuery(string tableName, string[] columns)
+                {
+                    string columnNames = string.Join(", ", columns);
+                    string parameterNames = string.Join(", ", columns.Select(c => $"@{c}"));
+                    return $"INSERT INTO {tableName} ({columnNames}) VALUES ({parameterNames})";
+                }
+
+                /// <summary>
+                /// 更新指定表中的数据。
+                /// </summary>
+                /// <param name="tableName">要更新的表名。</param>
+                /// <param name="columns">要更新的列名数组。</param>
+                /// <param name="values">对应的新值数组。</param>
+                /// <param name="condition">更新数据的条件。</param>
+                /// <exception cref="ArgumentException">当列数与值数不匹配时引发。</exception>
+                public void UpdateData(string tableName, string[] columns, object[] values, string condition)
+                {
+                    Logger.WriteDebug($"更新表'{tableName}' 更新项目{string.Join(",", columns)} 条件 {condition}");
+                    try
+                    {
+                        if (columns.Length != values.Length)
+                        {
+                            throw new ArgumentException("列数与值数必须相等。");
+                        }
+
+                        using (SQLiteCommand command = _Conn.CreateCommand())
+                        {
+                            command.CommandText = GenerateUpdateQuery(tableName, columns, condition);
+
+                            for (int i = 0; i < columns.Length; i++)
+                            {
+                                command.Parameters.AddWithValue($"@{columns[i]}", values[i]);
+                            }
+
+                            command.ExecuteNonQuery();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteError($"更新数据时出错!因为:{ex.Message}");
+                        throw;
+                    }
+                }
+                /// <summary>
+                /// 更新指定表中的数据。
+                /// </summary>
+                /// <param name="tableName">要更新的表名。</param>
+                /// <param name="data">包含要更新的列名及对应的新值的字典。</param>
+                /// <param name="condition">更新数据的条件。</param>
+                /// <exception cref="ArgumentException">当列数与值数不匹配时引发。</exception>
+                public void UpdateData(string tableName, Dictionary<string, object> data, string condition)
+                {
+                    Logger.WriteDebug($"更新表'{tableName}' 更新项目{string.Join(",", data.Keys)} 条件 {condition}");
+                    try
+                    {
+                        using (SQLiteCommand command = _Conn.CreateCommand())
+                        {
+                            List<string> updateExpressions = new List<string>();
+                            foreach (var kvp in data)
+                            {
+                                command.Parameters.AddWithValue($"@{kvp.Key}", kvp.Value);
+                                updateExpressions.Add($"{kvp.Key} = @{kvp.Key}");
+                            }
+
+                            command.CommandText = GenerateUpdateQuery(tableName, updateExpressions, condition);
+                            command.ExecuteNonQuery();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteError($"更新数据时出错!因为:{ex.Message}");
+                        throw;
+                    }
+                }
+
+                /// <summary>
+                /// 生成用于更新数据的SQLite查询语句。
+                /// </summary>
+                /// <param name="tableName">要更新的表名。</param>
+                /// <param name="columns">要更新的列名数组。</param>
+                /// <param name="condition">更新数据的条件。</param>
+                /// <returns>生成的SQLite查询语句。</returns>
+                private string GenerateUpdateQuery(string tableName, string[] columns, string condition)
+                {
+                    string setClause = string.Join(", ", columns.Select(c => c + " = @" + c));
+                    return $"UPDATE {tableName} SET {setClause} WHERE {condition}";
+                }
+                /// <summary>
+                /// 生成用于更新数据的SQLite查询语句。
+                /// </summary>
+                /// <param name="tableName">要更新的表名。</param>
+                /// <param name="updateExpressions">数据。</param>
+                /// <param name="condition">更新数据的条件。</param>
+                /// <returns>生成的SQLite查询语句。</returns>
+                private string GenerateUpdateQuery(string tableName, List<string> updateExpressions, string condition)
+                {
+                    string setClause = string.Join(", ", updateExpressions);
+                    return $"UPDATE {tableName} SET {setClause} WHERE {condition}";
+                }
+
+                /// <summary>
+                /// 查询指定表中满足条件的数据。
+                /// </summary>
+                /// <param name="tableName">要查询的表名。</param>
+                /// <param name="columns">要查询的列名数组。为 null 或空数组时表示查询所有列。</param>
+                /// <param name="condition">查询条件。</param>
+                /// <param name="orderBy">排序条件。例如： "ColumnName ASC"。</param>
+                /// <returns>满足条件的数据表。</returns>
+                public DataTable QueryData(string tableName, string[]? columns, string condition, string? orderBy = null)
+                {
+                    Logger.WriteDebug($"查询表'{tableName}' 查询项目{string.Join(",", columns ?? new string[] { "*" })} 条件 {condition} 排序 {orderBy}");
+                    try
+                    {
+                        using (SQLiteCommand command = _Conn.CreateCommand())
+                        {
+                            command.CommandText = GenerateQueryQuery(tableName, columns, condition, orderBy);
+
+                            using (SQLiteDataAdapter adapter = new SQLiteDataAdapter(command))
+                            {
+                                DataTable dataTable = new DataTable();
+                                adapter.Fill(dataTable);
+                                return dataTable;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteError($"查询数据时出错!因为:{ex.Message}");
+                        throw;
+                    }
+                }
+
+                /// <summary>
+                /// 生成用于查询数据的SQLite查询语句。
+                /// </summary>
+                /// <param name="tableName">要查询的表名。</param>
+                /// <param name="columns">要查询的列名数组。</param>
+                /// <param name="condition">查询条件。</param>
+                /// <param name="orderBy">排序条件。例如： "ColumnName ASC"。</param>
+                /// <returns>生成的SQLite查询语句。</returns>
+                private string GenerateQueryQuery(string tableName, string[]? columns, string condition, string? orderBy = null)
+                {
+                    string columnNames;
+
+                    if (columns == null || columns.Length == 0)
+                    {
+                        columnNames = "*"; // 查询所有列
+                    }
+                    else
+                    {
+                        columnNames = string.Join(", ", columns);
+                    }
+                    if (orderBy != null)
+                        return $"SELECT {columnNames} FROM {tableName} WHERE {condition} ORDER BY {orderBy}";
+                    else
+                        return $"SELECT {columnNames} FROM {tableName} WHERE {condition}";
+                }
+
+                /// <summary>
+                /// 分页查询指定表中的数据。
+                /// </summary>
+                /// <param name="tableName">要查询的表名。</param>
+                /// <param name="columns">要查询的列名数组。</param>
+                /// <param name="condition">查询条件。</param>
+                /// <param name="orderBy">排序条件。例如： "ColumnName ASC"。</param>
+                /// <param name="pageNumber">页码（从1开始）。</param>
+                /// <param name="pageSize">每页的条目数。</param>
+                /// <returns>指定页的数据表。</returns>
+                public DataTable QueryDataWithPagination(string tableName, string[]? columns, string condition, int pageNumber, int pageSize, string? orderBy = null)
+                {
+                    Logger.WriteDebug($"分页查询表'{tableName}' 查询项目{string.Join(",", columns ?? new string[] { "*" })} 条件 {condition} 排序 {orderBy} 第 {pageNumber} 页 每页 {pageSize} 条");
+
+                    try
+                    {
+                        using (SQLiteCommand command = _Conn.CreateCommand())
+                        {
+                            command.CommandText = GenerateQueryWithPaginationQuery(tableName, columns, condition, pageNumber, pageSize, orderBy);
+
+                            using (SQLiteDataAdapter adapter = new SQLiteDataAdapter(command))
+                            {
+                                DataTable dataTable = new DataTable();
+                                adapter.Fill(dataTable);
+                                return dataTable;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteError($"分页查询数据时出错!因为:{ex.Message}");
+                        throw;
+                    }
+                }
+
+                /// <summary>
+                /// 生成用于分页查询数据的SQLite查询语句。
+                /// </summary>
+                /// <param name="tableName">要查询的表名。</param>
+                /// <param name="columns">要查询的列名数组。</param>
+                /// <param name="condition">查询条件。</param>
+                /// <param name="pageNumber">页码（从1开始）。</param>
+                /// <param name="pageSize">每页的条目数。</param>
+                /// <param name="orderBy">排序条件。例如： "ColumnName ASC"。</param>
+                /// <returns>生成的SQLite查询语句。</returns>
+                private string GenerateQueryWithPaginationQuery(string tableName, string[]? columns, string condition, int pageNumber, int pageSize, string? orderBy = null)
+                {
+                    string columnNames;
+                    if (columns == null || columns.Length == 0)
+                    {
+                        columnNames = "*"; // 查询所有列
+                    }
+                    else
+                    {
+                        columnNames = string.Join(", ", columns);
+                    }
+                    int offset = (pageNumber - 1) * pageSize;
+                    if (orderBy != null)
+                        return $"SELECT {columnNames} FROM {tableName} WHERE {condition} ORDER BY {orderBy} LIMIT {pageSize} OFFSET {offset}";
+                    else
+                        return $"SELECT {columnNames} FROM {tableName} WHERE {condition} LIMIT {pageSize} OFFSET {offset}";
+                }
+
+                /// <summary>
+                /// 获取指定查询条件下的数据总行数。
+                /// </summary>
+                /// <param name="tableName">要查询的表名。</param>
+                /// <param name="condition">查询条件。</param>
+                /// <returns>数据总行数。</returns>
+                public int GetTotalRowCount(string tableName, string condition)
+                {
+                    Logger.WriteDebug($"询表项目数量'{tableName}' 条件{condition}");
+                    try
+                    {
+                        using (SQLiteCommand command = _Conn.CreateCommand())
+                        {
+                            command.CommandText = GenerateTotalRowCountQuery(tableName, condition);
+                            int rowCount = Convert.ToInt32(command.ExecuteScalar());
+                            return rowCount;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteError($"获取数据总行数时出错!因为:{ex.Message}");
+                        throw;
+                    }
+                }
+
+                /// <summary>
+                /// 生成用于查询数据总行数的SQLite查询语句。
+                /// </summary>
+                /// <param name="tableName">要查询的表名。</param>
+                /// <param name="condition">查询条件。</param>
+                /// <returns>生成的SQLite查询语句。</returns>
+                private string GenerateTotalRowCountQuery(string tableName, string condition)
+                {
+                    return $"SELECT COUNT(*) FROM {tableName} WHERE {condition}";
+                }
+
+                /// <summary>
+                /// 删除指定表中满足条件的数据。
+                /// </summary>
+                /// <param name="tableName">要删除数据的表名。</param>
+                /// <param name="condition">删除数据的条件。</param>
+                public void DeleteData(string tableName, string condition)
+                {
+                    Logger.WriteDebug($"删除表'{tableName}' 条件 {condition}");
+                    try
+                    {
+                        using (SQLiteCommand command = _Conn.CreateCommand())
+                        {
+                            command.CommandText = GenerateDeleteQuery(tableName, condition);
+
+                            command.ExecuteNonQuery();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteError($"删除数据时出错!因为:{ex.Message}");
+                        throw;
+                    }
+                }
+
+                /// <summary>
+                /// 生成用于删除数据的SQLite查询语句。
+                /// </summary>
+                /// <param name="tableName">要删除数据的表名。</param>
+                /// <param name="condition">删除数据的条件。</param>
+                /// <returns>生成的SQLite查询语句。</returns>
+                private string GenerateDeleteQuery(string tableName, string condition)
+                {
+                    return $"DELETE FROM {tableName} WHERE {condition}";
+                }
+
+                /// <summary>
+                /// 创建表。
+                /// </summary>
+                /// <param name="tableName">要创建的表名。</param>
+                /// <param name="columns">要创建的列定义数组。</param>
+                public void CreateTable(string tableName, string[] columns)
+                {
+                    Logger.WriteDebug($"创建表'{tableName}' 创建项目{string.Join(",", columns)}");
+                    try
+                    {
+                        using (SQLiteCommand command = _Conn.CreateCommand())
+                        {
+                            command.CommandText = GenerateCreateTableQuery(tableName, columns);
+                            command.ExecuteNonQuery();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteError("创建表时出错：" + ex.Message);
+                        throw; // 将异常继续抛出
+                    }
+                }
+
+                /// <summary>
+                /// 生成用于创建表的SQLite查询语句。
+                /// </summary>
+                /// <param name="tableName">要创建的表名。</param>
+                /// <param name="columns">要创建的列定义数组。</param>
+                /// <returns>生成的SQLite查询语句。</returns>
+                private string GenerateCreateTableQuery(string tableName, string[] columns)
+                {
+                    string columnDefinitions = string.Join(", ", columns);
+                    return $"CREATE TABLE {tableName} ({columnDefinitions})";
+                }
+
+                /// <summary>
+                /// 删除表。
+                /// </summary>
+                /// <param name="tableName">要删除的表名。</param>
+                public void DropTable(string tableName)
+                {
+                    Logger.WriteDebug($"删除表'{tableName}'");
+                    try
+                    {
+                        using (SQLiteCommand command = _Conn.CreateCommand())
+                        {
+                            command.CommandText = GenerateDropTableQuery(tableName);
+                            command.ExecuteNonQuery();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteError("删除表时出错：" + ex.Message);
+                        throw; // 将异常继续抛出
+                    }
+                }
+
+                /// <summary>
+                /// 生成用于删除表的SQLite查询语句。
+                /// </summary>
+                /// <param name="tableName">要删除的表名。</param>
+                /// <returns>生成的SQLite查询语句。</returns>
+                private string GenerateDropTableQuery(string tableName)
+                {
+                    return $"DROP TABLE IF EXISTS {tableName}";
+                }
 
                 /// <summary>
                 /// 打开连接
