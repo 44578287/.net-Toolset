@@ -2,6 +2,10 @@
 using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using Spectre.Console;
+using 小工具集;
+using static Azure.Core.HttpHeader;
+using static 小工具集.Windows;
 using static 小工具集.Windows.SQL;
 
 //Console.WriteLine(LnkToPath(@"C:\Users\g9964\Desktop\阿里巴巴DNS检测工具.lnk"));
@@ -82,61 +86,26 @@ else
 var Data = await client.GetAsync("https://www.google.com");
 Console.WriteLine(await Data.Content.ReadAsStringAsync());*/
 
-SQLite SQLite = new(new(), 2000);
-//Console.WriteLine(SQLite.ConneTest());
-//Console.WriteLine(SQLite.Open());
-/*SQLite.CreateTable("user", new[]
-                    {
-                        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT",
-                        "account TEXT NOT NULL",
-                        "name TEXT",
-                        "pwd TEXT",
-                        "mail TEXT",
-                        "ug INTEGER",
-                        "config TEXT",
-                        "state TEXT",
-                        "time INTEGER",
-                        //"FOREIGN KEY (ug) REFERENCES ug (id)"
-                    });*/
-//var Conn = SQLite.Open();
-//SQLite.Command(@"SELECT name FROM sqlite_master WHERE type='table' AND name='user';", Conn)?.ExecuteReader();
-SQLiteCommand Cmd;
+// 创建 Stopwatch 实例
 Stopwatch stopwatch = new Stopwatch();
-
-//SQLiteConnection Conn = SQLite.Open();
-//Task A = new Task(() => Test());
-List<Task> AA = new List<Task>();
-for (int i = 0; i < 5; i++)
-{
-    AA.Add(new(() => Test()));
-}
 stopwatch.Start();
-foreach (var task in AA)
+//Task T= Network.Download.DownloadFileProgressBar("https://cloud.445720.xyz/f/35oSV/w64devkit.rar", "D:\\Projects\\vs2022\\小工具集\\工具测试\\bin\\Debug\\net7.0\\w64devkit.rar");
+Network.Download download = new Network.Download();
+//Task<bool> T = download.DownloadFileBase("https://cloud.445720.xyz/f/35oSV/w64devkit.rar", "D:\\Projects\\vs2022\\小工具集\\工具测试\\bin\\Debug\\net7.0\\w64devkit.rar");
+Task T=  download.DownloadFileLine(new() 
 {
-    task.Start();
+    new(){Url = "https://cloud.445720.xyz/f/35oSV/w64devkit.rar",Name = "D:\\Projects\\vs2022\\小工具集\\工具测试\\bin\\Debug\\net7.0\\w64devkit1.rar"},
+    new(){Url = "https://cloud.445720.xyz/f/35oSV/w64devkit.rar",Name = "D:\\Projects\\vs2022\\小工具集\\工具测试\\bin\\Debug\\net7.0\\w64devkit2.rar"}
+});
+while (T.Status != TaskStatus.RanToCompletion)
+{
+    AnsiConsole.WriteLine(小工具集.Windows.Text.ConvertByteUnits(download.DownloadFileDatas[0].CurrentLength));
+    Thread.Sleep(500);
 }
-Task.WaitAll(AA.ToArray());
+T.Wait();
 
-//SQLite.Close(Conn);
 stopwatch.Stop();
-TimeSpan elapsedTime = stopwatch.Elapsed;
-Console.WriteLine($"代码执行时长：{elapsedTime.TotalMilliseconds} 毫秒");
-//SQLite.Close(Conn);
-
-
-void Test()
-{
-    for (int i = 0; i <= 1000; i++)
-    {
-        SQLiteConnection Conn = SQLite.Open();
-        //using (SQLiteConnection Conn = SQLite.Open())
-        {
-            Cmd = new SQLiteCommand("SELECT * FROM main.user WHERE name = 'img_774577.jpg';", Conn);
-            //Cmd.ExecuteReader();
-            //Cmd.ExecuteNonQuery();
-            Console.WriteLine(Cmd.ExecuteNonQuery());
-        }
-        SQLite.Close(Conn);
-        //Conn.Close();
-    }
-}
+// 获取经过的时间
+TimeSpan elapsed = stopwatch.Elapsed;
+// 输出执行时间
+Console.WriteLine($"代码执行时间: {elapsed.TotalMilliseconds} 毫秒");

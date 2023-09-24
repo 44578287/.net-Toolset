@@ -3,18 +3,22 @@ using System.ComponentModel;
 using System.Data;
 using System.Data.SQLite;
 using System.Diagnostics;
+using System.Net;
 using System.Net.NetworkInformation;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
+using System.Text.Json;
 using CSChaCha20;
+using Downloader;
 using LoongEgg.LoongLogger;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using SharpCompress.Archives;
 using SharpCompress.Common;
 using Spectre.Console;
-using Standart.Hash.xxHash;
-using static 小工具集.Windows.Code;
+using xxHashSharp;
 using static 小工具集.Windows.Network.HttpEnum;
 
 namespace 小工具集
@@ -231,6 +235,7 @@ namespace 小工具集
             /// <param name="ExternalRuns">外部运行</param>
             /// <param name="Hide">隐藏外部运行</param>
             /// <returns>进程</returns>
+            [Obsolete("有新的方法可以用")]
             public static async Task<Process?> StartAppAsync(string Path, string? Args = null, bool ExternalRuns = false, bool Hide = false)
             {
                 ProcessStartInfo startInfo = new ProcessStartInfo();
@@ -254,6 +259,7 @@ namespace 小工具集
             /// <param name="Path">文件路径</param>
             /// <param name="StartInfo">启动信息</param>
             /// <returns>进程</returns>
+            [Obsolete("有新的方法可以用")]
             public static async Task<Process?> StartAppAsync(string Path, ProcessStartInfo StartInfo)
             {
                 ProcessStartInfo _StartInfo = StartInfo;
@@ -269,6 +275,7 @@ namespace 小工具集
             /// <param name="Args">启动指令</param>
             /// <param name="StartInfo">启动信息</param>
             /// <returns>进程</returns>
+            [Obsolete("有新的方法可以用")]
             public static async Task<Process?> StartAppAsync(string Path, string Args, ProcessStartInfo StartInfo)
             {
                 ProcessStartInfo _StartInfo = StartInfo;
@@ -284,6 +291,7 @@ namespace 小工具集
             /// <param name="Path">文件路径</param>
             /// <param name="Args">启动指令</param>
             /// <returns>进程</returns>
+            [Obsolete("有新的方法可以用")]
             public static async Task<Process?> StartAppAsyncNoShow(string Path, string? Args = null)
             {
                 ProcessStartInfo _StartInfo = new();
@@ -308,6 +316,7 @@ namespace 小工具集
             /// <param name="Path">文件路径</param>
             /// <param name="Args">启动指令</param>
             /// <returns>进程</returns>
+            [Obsolete("有新的方法可以用")]
             public static string StartAppAsyncNoShowRData(string Path, string? Args = null)
             {
                 // 创建一个新的进程实例
@@ -344,10 +353,10 @@ namespace 小工具集
 
                 return output;
             }
-
             /// <summary>
             /// 运行并监控应用
             /// </summary>
+            [Obsolete("有新的方法可以用")]
             public class AppProbes
             {
                 string _Path = "";
@@ -415,6 +424,7 @@ namespace 小工具集
             /// <param name="Path">文件路径</param>
             /// <param name="Args">启动信息</param>
             /// <param name="action">信息捕获</param>
+            [Obsolete("有新的方法可以用")]
             public static void StartAppProbes(string Path, string? Args = null, Action<string?>? action = null)
             {
                 // 创建一个新的进程
@@ -449,6 +459,165 @@ namespace 小工具集
                 // 等待进程执行完成
                 process.WaitForExit();
             }
+
+            /// <summary>
+            /// 进程助手
+            /// </summary>
+            class ProcessHelper
+            {
+                // 枚举用于指定启动方式
+                public enum ProcessStartMode
+                {
+                    /// <summary>
+                    /// 开启新窗口并运行
+                    /// </summary>
+                    ShowWindow,
+                    /// <summary>
+                    /// 不开启窗口但打印输出
+                    /// </summary>
+                    NoShowWindow,
+                    /// <summary>
+                    /// 不开启窗口且不打印输出
+                    /// </summary>
+                    NoShowNoOutput
+                }
+                /// <summary>
+                /// 进程启动模式
+                /// </summary>
+                private ProcessStartMode startMode;
+                /// <summary>
+                /// 输出接收
+                /// </summary>
+                public event Action<string?>? OutputReceived;
+                /// <summary>
+                /// 错误输出接收
+                /// </summary>
+                public event Action<string?>? OutputError;
+                /// <summary>
+                /// 输入流
+                /// </summary>
+                private event Action<string?>? InputRequired;
+                /// <summary>
+                /// 构造函数
+                /// </summary>
+                /// <param name="startMode">启动模式</param>
+                public ProcessHelper(ProcessStartMode startMode = ProcessStartMode.NoShowNoOutput)
+                {
+                    this.startMode = startMode;
+                }
+
+                public async Task<string> StartAppAsyncNoShowRData(string Path, string? Args = null)
+                {
+                    return await Task.Run(async () =>
+                    {
+                        try
+                        {
+                            // 创建一个新的进程实例
+                            Process process = new Process();
+
+                            // 设置要运行的外部程序的路径和参数
+                            process.StartInfo.FileName = Path;
+                            process.StartInfo.Arguments = Args;
+
+                            // 根据启动方式设置窗口和输出
+                            switch (startMode)
+                            {
+                                case ProcessStartMode.ShowWindow:
+                                    //process.StartInfo.CreateNoWindow = true;
+                                    //process.StartInfo.CreateNoWindow = true;
+                                    //process.StartInfo.WindowStyle = ProcessWindowStyle.Normal;
+                                    //process.StartInfo.RedirectStandardOutput = true;
+                                    //process.StartInfo.RedirectStandardError = true;
+                                    //process.StartInfo.UseShellExecute = true;
+                                    break;
+                                case ProcessStartMode.NoShowWindow:
+                                    //process.StartInfo.CreateNoWindow = true;
+                                    //process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+                                    //process.StartInfo.RedirectStandardOutput = true;
+                                    //process.StartInfo.RedirectStandardError = true;
+                                    break;
+                                case ProcessStartMode.NoShowNoOutput:
+                                    process.StartInfo.RedirectStandardInput = true; // 启用标准输入流
+                                    process.StartInfo.CreateNoWindow = true;
+                                    process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+                                    process.StartInfo.RedirectStandardOutput = true;
+                                    process.StartInfo.RedirectStandardError = true;
+                                    break;
+                            }
+
+
+                            // 创建一个StringBuilder来保存输出
+                            StringBuilder outputBuilder = new StringBuilder();
+
+                            // 定义一个异步方法来读取标准输出流
+                            async Task ReadOutputAsync(StreamReader reader)
+                            {
+                                while (!reader.EndOfStream)
+                                {
+                                    string? line = await reader.ReadLineAsync();
+                                    outputBuilder.AppendLine(line);
+
+                                    // 触发输出事件
+                                    OutputReceived?.Invoke(line);
+                                }
+                            }
+
+                            // 定义一个异步方法来读取标准错误输出流
+                            async Task ReadOutputErrorAsync(StreamReader reader)
+                            {
+                                while (!reader.EndOfStream)
+                                {
+                                    string? line = await reader.ReadLineAsync();
+                                    outputBuilder.AppendLine(line);
+
+                                    // 触发输出事件
+                                    OutputError?.Invoke(line);
+                                }
+                            }
+
+                            //定义发送数据
+                            InputRequired += (e) =>
+                            {
+                                // 获取标准输入流
+                                StreamWriter standardInput = process.StandardInput;
+                                // 例如，向CMD发送命令
+                                standardInput.WriteLine(e);
+                                standardInput.Flush(); // 刷新输入流
+                            };
+
+                            // 启动外部程序
+                            process.Start();
+
+                            // 异步读取标准输出和标准错误
+                            Task outputTask = ReadOutputAsync(process.StandardOutput);
+                            Task errorTask = ReadOutputErrorAsync(process.StandardError);
+
+                            // 等待外部程序完成
+                            await Task.WhenAll(outputTask, errorTask);
+                            process.WaitForExit();
+
+                            // 关闭进程
+                            process.Close();
+
+                            // 返回完整的输出
+                            return outputBuilder.ToString();
+                        }
+                        catch (Exception e)
+                        {
+                            OutputError?.Invoke(e.Message);
+                            return e.Message;
+                        }
+                    });
+                }
+                /// <summary>
+                /// 发送命令
+                /// </summary>
+                /// <param name="Command">命令</param>
+                public void Send(string Command)
+                {
+                    InputRequired!.Invoke(Command);
+                }
+            }
         }
         /// <summary>
         /// 网络相关
@@ -456,168 +625,359 @@ namespace 小工具集
         public static class Network
         {
             /// <summary>
-            /// 下载文件
+            /// 系统UG
             /// </summary>
-            /// <param name="Url">地址</param>
-            /// <param name="Path">保存路径</param>
-            /// <param name="Name">保存文件名</param>
-            /// <param name="progress">下载进度</param>
-            /// <returns>文件路径</returns>
-            public static async Task<string?> DownloadFile(string Url, string? Path = null, string? Name = null, IProgress<double>? progress = null)
+            public static readonly string UserAgent = GetNativeUserAgent();
+
+            /// <summary>
+            /// 下载相关
+            /// </summary>
+            public class Download
             {
-                Path ??= Windows.Path.ThisAppPath;
-                using (HttpClient client = new HttpClient())
+                /// <summary>
+                /// 下载文件
+                /// </summary>
+                /// <param name="Url">地址</param>
+                /// <param name="Path">保存路径</param>
+                /// <param name="Name">保存文件名</param>
+                /// <param name="progress">下载进度</param>
+                /// <returns>文件路径</returns>
+                [Obsolete("有新的方法可以用")]
+                public static async Task<string?> DownloadFile(string Url, string? Path = null, string? Name = null, IProgress<double>? progress = null)
                 {
-                    try
+                    Path ??= Windows.Path.ThisAppPath;
+                    using (HttpClient client = new HttpClient())
                     {
-                        using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, Url))
-                        using (HttpResponseMessage response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
+                        try
                         {
-                            // 确保响应成功
-                            response.EnsureSuccessStatusCode();
-
-                            // 从响应中获取文件名
-                            Name ??= response.Content.Headers.ContentDisposition?.FileName ?? System.IO.Path.GetFileName(new Uri(Url).LocalPath);
-
-                            // 过滤文件名
-                            string invalidChars = new string(System.IO.Path.GetInvalidFileNameChars());
-                            Name = string.Concat(Name.Split(invalidChars.ToCharArray()));
-
-                            Name = System.IO.Path.Combine(Path, Name);
-
-                            // 获取响应内容流
-                            using (Stream contentStream = await response.Content.ReadAsStreamAsync())
+                            using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, Url))
+                            using (HttpResponseMessage response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
                             {
-                                // 获取文件总大小
-                                long? totalBytes = response.Content.Headers.ContentLength;
+                                // 确保响应成功
+                                response.EnsureSuccessStatusCode();
 
-                                // 创建文件流
-                                using (FileStream fileStream = new FileStream(Name, FileMode.Create, FileAccess.Write, FileShare.None))
+                                // 从响应中获取文件名
+                                Name ??= response.Content.Headers.ContentDisposition?.FileName ?? System.IO.Path.GetFileName(new Uri(Url).LocalPath);
+
+                                // 过滤文件名
+                                string invalidChars = new string(System.IO.Path.GetInvalidFileNameChars());
+                                Name = string.Concat(Name.Split(invalidChars.ToCharArray()));
+
+                                Name = System.IO.Path.Combine(Path, Name);
+
+                                // 获取响应内容流
+                                using (Stream contentStream = await response.Content.ReadAsStreamAsync())
                                 {
-                                    byte[] buffer = new byte[4096];
-                                    long bytesCopied = 0;
-                                    int bytesRead;
-                                    while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
-                                    {
-                                        await fileStream.WriteAsync(buffer, 0, bytesRead);
+                                    // 获取文件总大小
+                                    long? totalBytes = response.Content.Headers.ContentLength;
 
-                                        bytesCopied += bytesRead;
-                                        if (totalBytes.HasValue && progress != null)
+                                    // 创建文件流
+                                    using (FileStream fileStream = new FileStream(Name, FileMode.Create, FileAccess.Write, FileShare.None))
+                                    {
+                                        byte[] buffer = new byte[4096];
+                                        long bytesCopied = 0;
+                                        int bytesRead;
+                                        while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
                                         {
-                                            // 使用已下载的大小计算进度
-                                            double percentage = (double)bytesCopied / totalBytes.Value * 100;
-                                            progress.Report(percentage);
+                                            await fileStream.WriteAsync(buffer, 0, bytesRead);
+
+                                            bytesCopied += bytesRead;
+                                            if (totalBytes.HasValue && progress != null)
+                                            {
+                                                // 使用已下载的大小计算进度
+                                                double percentage = (double)bytesCopied / totalBytes.Value * 100;
+                                                progress.Report(percentage);
+                                            }
                                         }
                                     }
                                 }
+
+                                return Name;
                             }
-
-                            return Name;
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        Spectre.Console.AnsiConsole.WriteLine(ex.Message);
-                        // 可以根据实际需求进行异常处理，返回更详细的错误信息给调用者
-                        throw new Exception("下载文件失败：" + ex.Message);
-                    }
-                }
-            }
-            /// <summary>
-            /// 带有进度条的下在文件
-            /// </summary>
-            /// <param name="Url">文件地址</param>
-            /// <param name="Path">保存路径</param>
-            /// <param name="Name">保存文件名</param>
-            /// <returns>保存文件路径</returns>
-            public static async Task<string?> DownloadFileWithProgress(string Url, string? Path = null, string? Name = null)
-            {
-                Path ??= Windows.Path.ThisAppPath;
-
-                // 发送HTTP请求并获取文件总大小
-                long? totalBytes = await GetFileSizeAsync(Url);
-
-                // 创建进度报告对象
-                ProgressTracker progressTracker = new ProgressTracker(totalBytes);
-
-                // 创建进度报告回调函数
-                IProgress<double> progress = new Progress<double>(percentage =>
-                {
-                    progressTracker.UpdateProgress(percentage);
-                    long? downloadedBytes = progressTracker.DownloadedBytes;
-                    double speed = progressTracker.DownloadSpeed;
-
-                    // 显示下载进度、已下载大小和下载速度
-                    Spectre.Console.AnsiConsole.WriteLine($"下载进度：{percentage.ToString("0.0")}% - {GetSizeString(downloadedBytes)}/{GetSizeString(totalBytes)} - {GetSizeString((long?)speed)}/s");
-                });
-
-                // 下载文件并返回文件路径
-                return await DownloadFile(Url, Path, Name, progress);
-            }
-            private static async Task<long?> GetFileSizeAsync(string Url)
-            {
-                using (HttpClient client = new HttpClient())
-                {
-                    using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Head, Url))
-                    using (HttpResponseMessage response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
-                    {
-                        response.EnsureSuccessStatusCode();
-                        return response.Content.Headers.ContentLength;
-                    }
-                }
-            }
-            private static string GetSizeString(long? size)
-            {
-                if (size == null || size <= 0)
-                    return "0B";
-
-                string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
-                int suffixIndex = 0;
-                double bytes = (double)size.Value;
-
-                while (bytes >= 1024 && suffixIndex < suffixes.Length - 1)
-                {
-                    bytes /= 1024;
-                    suffixIndex++;
-                }
-
-                return $"{bytes:F1}{suffixes[suffixIndex]}";
-            }
-            class ProgressTracker
-            {
-                private readonly long? totalBytes;
-                private long downloadedBytes;
-                private Stopwatch stopwatch;
-
-                public ProgressTracker(long? totalBytes)
-                {
-                    this.totalBytes = totalBytes;
-                    downloadedBytes = 0;
-                    stopwatch = Stopwatch.StartNew();
-                }
-
-                public long? DownloadedBytes => downloadedBytes;
-
-                public double DownloadSpeed
-                {
-                    get
-                    {
-                        double elapsedSeconds = stopwatch.Elapsed.TotalSeconds;
-                        if (elapsedSeconds > 0 && downloadedBytes > 0)
+                        catch (Exception ex)
                         {
-                            double speed = downloadedBytes / elapsedSeconds;
-                            return speed;
+                            Spectre.Console.AnsiConsole.WriteLine(ex.Message);
+                            // 可以根据实际需求进行异常处理，返回更详细的错误信息给调用者
+                            throw new Exception("下载文件失败：" + ex.Message);
                         }
-
-                        return 0;
                     }
                 }
-
-                public void UpdateProgress(double percentage)
+                /// <summary>
+                /// 下载配置
+                /// </summary>
+                private static DownloadConfiguration DownloadOpt = new()
                 {
-#pragma warning disable CS8629 // 可为 null 的值类型可为 null。
-                    downloadedBytes = (long)(totalBytes * (percentage / 100));
-#pragma warning restore CS8629 // 可为 null 的值类型可为 null。
+                    // 通常，主机支持的最大字节数为8000，默认值为8000
+                    BufferBlockSize = 10240,  // (缓冲块大小，用于优化下载性能)
+
+                    // 要下载的文件部分数，默认值为1
+                    //ChunkCount = 8,  // (要下载的文件分块数)
+
+                    // 限制下载速度为2MB/s，默认值为零或无限制
+                    //MaximumBytesPerSecond = 1024 * 1024 * 2,  // (下载速度限制，以字节/秒为单位)
+
+                    // 失败时的最大重试次数
+                    MaxTryAgainOnFailover = 2,  // (失败时的最大重试次数)
+
+                    // 是否并行下载文件的部分，默认值为false
+                    ParallelDownload = true,  // (是否并行下载文件的不同部分)
+
+                    // 并行下载的数量。默认值与分块数相同
+                    ParallelCount = 8,  // (并行下载的数量)
+
+                    // 当下载完成但失败时，清除包块数据， 默认值为false
+                    ClearPackageOnCompletionWithFailure = true,  // (在下载失败时是否清除包块数据)
+
+                    // 在开始下载之前，预留文件大小的存储空间，默认值为false
+                    ReserveStorageSpaceBeforeStartingDownload = true,  // (在开始下载之前是否为文件预留存储空间)
+                };
+                /// <summary>
+                /// 
+                /// </summary>
+                /// <param name="Url"></param>
+                /// <param name="Name"></param>
+                /// <param name="RequestConfiguration"></param>
+                /// <returns></returns>
+                public static async Task<DownloadFileData> DownloadFileProgressBar(string Url, string Name, RequestConfiguration? RequestConfiguration = null)
+                {
+                    if (RequestConfiguration != null)
+                        DownloadOpt.RequestConfiguration = RequestConfiguration;
+
+                    DownloadFileData downloadFileData = new();
+                    var downloader = new DownloadService(DownloadOpt);
+                    await AnsiConsole.Progress()
+                        .Columns(new ProgressColumn[]
+                        {
+                            new TaskDescriptionColumn(),    // 任务描述
+                            new ProgressBarColumn(),        // 进度栏
+                            new PercentageColumn(),         // 百分比
+                            new RemainingTimeColumn(),      // 余下的时间
+                            new SpinnerColumn(),            // 旋转器
+                        })
+                        .StartAsync(async ctx =>
+                        {
+                            ProgressTask? task = null;
+                            // 在每次下载开始时提供`FileName`和`TotalBytesToReceive`信息
+                            downloader.DownloadStarted += (sender, e) =>
+                            {
+                                downloadFileData.Name = e.FileName;
+                                downloadFileData.MaxLength = e.TotalBytesToReceive;
+                                AnsiConsole.MarkupLine($"[yellow]开始下载文件[/] [dodgerblue2]{Name}[/] ({Text.ConvertByteUnits(e.TotalBytesToReceive)})");
+                                //创建进度条
+                                task = ctx.AddTask($"[green]{downloadFileData.Name}[/]");
+                                task.MaxValue = downloadFileData.MaxLength;
+                            };
+                            // (下载开始事件：当下载开始时触发此事件，提供下载文件名和总字节数)
+                            // 提供有关分块下载的任何信息，如每个分块的进度百分比、速度、总接收字节数和接收字节数组以进行实时流传输
+                            /*downloader.ChunkDownloadProgressChanged += (sender, e) =>
+                            {
+                                AnsiConsole.WriteLine($"{e.ActiveChunks}---{Text.ConvertByteUnits(e.AverageBytesPerSecondSpeed)}");
+                            };*/
+                            // (分块下载进度更改事件：提供分块下载的进度信息，包括每个分块的进度百分比、速度等)
+                            // 提供有关下载进度的任何信息，如所有分块进度的总进度百分比、总速度、平均速度、总接收字节数和接收字节数组以进行实时流传输
+                            downloader.DownloadProgressChanged += (sender, e) =>
+                            {
+                                task!.Value = e.ReceivedBytesSize;
+                                task.Description = $"[green]{downloadFileData.Name}[/] [yellow]{Text.ConvertByteUnits(e.BytesPerSecondSpeed)}[/]";
+                                //Console.WriteLine(e.ProgressPercentage);
+                            };
+                            // (下载进度更改事件：提供下载的总体进度信息，包括总进度百分比、速度等)
+                            // 下载完成事件，可以包括发生的错误、取消或成功完成的下载
+                            downloader.DownloadFileCompleted += (sender, e) =>
+                            {
+                                if (e.Error != null)
+                                {
+                                    downloadFileData.State = false;
+                                    task!.Description = $"[red]{Name} 下载失败![/]";
+                                }
+                                else
+                                {
+                                    downloadFileData.State = true;
+                                    task!.Description = $"[green]{Name} 下载成功![/]";
+                                }
+                            };
+
+                            // (下载文件完成事件：在下载完成时触发此事件，可能包括错误信息、取消或成功完成的下载)
+                            await downloader.DownloadFileTaskAsync(Url, Name);
+                        });
+                    return downloadFileData;
+                }
+
+                /// <summary>
+                /// 文件下载数据集
+                /// </summary>
+                public List<DownloadFileData?> DownloadFileDatas { get; } = new();
+                /// <summary>
+                /// 文件下载任务集
+                /// </summary>
+                private List<Task<bool>?>? DownloadFileTasks;
+                /// <summary>
+                /// 文件下载 基类
+                /// </summary>
+                /// <param name="Url">文件地址</param>
+                /// <param name="Name">文件名称</param>
+                /// <param name="RequestConfiguration">请求配置</param>
+                /// <returns>任务成功与否</returns>
+                public async Task<bool> DownloadFileBase(string Url, string Name, RequestConfiguration? RequestConfiguration = null)
+                {
+                    if (RequestConfiguration != null)
+                        DownloadOpt.RequestConfiguration = RequestConfiguration;
+
+                    DownloadFileData downloadFileData = new();
+                    DownloadFileDatas.Add(downloadFileData);
+                    var downloader = new DownloadService(DownloadOpt);
+                    downloader.DownloadStarted += (sender, e) =>
+                    {
+                        downloadFileData.Name = e.FileName;
+                        downloadFileData.MaxLength = e.TotalBytesToReceive;
+                    };
+                    downloader.DownloadProgressChanged += (sender, e) =>
+                    {
+                        downloadFileData.CurrentLength = e.ReceivedBytesSize;
+                    };
+                    downloader.DownloadFileCompleted += (sender, e) =>
+                    {
+                        if (e.Error != null)
+                        {
+                            downloadFileData.State = false;
+                            downloadFileData.Error = e.Error;
+                        }
+                        else
+                            downloadFileData.State = true;
+                    };
+                    await downloader.DownloadFileTaskAsync(Url, Name);
+                    return downloadFileData.State;
+                }
+
+                /// <summary>
+                /// 文件下载 基类
+                /// </summary>
+                /// <param name="DownloadInfo">下载信息</param>
+                /// <returns>任务成功与否</returns>
+                public async Task<bool> DownloadFileBase(DownloadInfo DownloadInfo)
+                {
+                    return await DownloadFileBase(DownloadInfo.Url, DownloadInfo.Name, DownloadInfo.RequestConfiguration);
+                }
+
+                /// <summary>
+                /// 文件下载 基类
+                /// </summary>
+                /// <param name="DownloadInfo">下载信息</param>
+                /// <param name="Task">进步条信息</param>
+                /// <returns>任务成功与否</returns>
+                private async Task<bool> DownloadFileLineBase(DownloadInfo DownloadInfo, ProgressTask Task)
+                {
+                    if (DownloadInfo.RequestConfiguration != null)
+                        DownloadOpt.RequestConfiguration = DownloadInfo.RequestConfiguration;
+
+                    DownloadFileData downloadFileData = new();
+                    DownloadFileDatas.Add(downloadFileData);
+                    var downloader = new DownloadService(DownloadOpt);
+                    downloader.DownloadStarted += (sender, e) =>
+                    {
+                        downloadFileData.Name = e.FileName;
+                        downloadFileData.MaxLength = e.TotalBytesToReceive;
+                        Task.MaxValue = e.TotalBytesToReceive;
+                        AnsiConsole.MarkupLine($"[yellow]开始下载文件[/] [dodgerblue2]{downloadFileData.Name}[/] ({Text.ConvertByteUnits(downloadFileData.MaxLength)})");
+                    };
+                    downloader.DownloadProgressChanged += (sender, e) =>
+                    {
+                        downloadFileData.CurrentLength = e.ReceivedBytesSize;
+                        Task.Value = e.ReceivedBytesSize;
+                        Task.Description = $"[green]{downloadFileData.Name}[/] [yellow]{Text.ConvertByteUnits(e.BytesPerSecondSpeed)}[/]";
+                    };
+                    downloader.DownloadFileCompleted += (sender, e) =>
+                    {
+                        if (e.Error != null)
+                        {
+                            downloadFileData.State = false;
+                            downloadFileData.Error = e.Error;
+                            Task!.Description = $"[red]{downloadFileData.Name} 下载失败![/]";
+                        }
+                        else
+                        {
+                            downloadFileData.State = true;
+                            Task!.Description = $"[green]{downloadFileData.Name} 下载成功![/]";
+                        }
+                    };
+                    await downloader.DownloadFileTaskAsync(DownloadInfo.Url, DownloadInfo.Name);
+                    return downloadFileData.State;
+                }
+
+                /// <summary>
+                /// 下载列队
+                /// </summary>
+                /// <param name="DownloadInfos">下载信息列表</param>
+                /// <returns>任务</returns>
+                public async Task DownloadFileLine(List<DownloadInfo> DownloadInfos)
+                {
+                    await AnsiConsole.Progress()
+                        .Columns(new ProgressColumn[]
+                        {
+                            new TaskDescriptionColumn(),    // 任务描述
+                            new ProgressBarColumn(),        // 进度栏
+                            new PercentageColumn(),         // 百分比
+                            new RemainingTimeColumn(),      // 余下的时间
+                            new SpinnerColumn(),            // 旋转器
+                        })
+                        .StartAsync(async ctx =>
+                        {
+                            //遍历添加任务
+                            DownloadFileTasks = new();
+                            for (int i = 0; i < DownloadInfos.Count; i++)
+                            {
+                                var Task = ctx.AddTask($"[green]{DownloadInfos[i].Name}[/]");
+                                DownloadFileTasks.Add(DownloadFileLineBase(DownloadInfos[i], Task));
+                            }
+                            //等待所有下载任务结束
+                            Task.WaitAll(DownloadFileTasks.ToArray()!);
+                        });
+                }
+                /// <summary>
+                /// 下载信息
+                /// </summary>
+                public class DownloadInfo
+                {
+                    /// <summary>
+                    /// 文件地址
+                    /// </summary>
+                    public required string Url { get; set; }
+                    /// <summary>
+                    /// 文件名称
+                    /// </summary>
+                    public required string Name { get; set; }
+                    /// <summary>
+                    /// 请求配置
+                    /// </summary>
+                    public RequestConfiguration? RequestConfiguration { get; set; } = null;
+                }
+
+                /// <summary>
+                /// 下载数据内容
+                /// </summary>
+                public class DownloadFileData
+                {
+                    /// <summary>
+                    /// 文件名
+                    /// </summary>
+                    public string? Name { get; set; }
+                    /// <summary>
+                    /// 文件大小
+                    /// </summary>
+                    public long MaxLength { get; set; }
+                    /// <summary>
+                    /// 目前大小
+                    /// </summary>
+                    public long CurrentLength { get; set; }
+                    /// <summary>
+                    /// 状态
+                    /// </summary>
+                    public bool State { get; set; }
+                    /// <summary>
+                    /// 错误
+                    /// </summary>
+                    public Exception? Error { get; set; }
                 }
             }
 
@@ -868,6 +1228,33 @@ namespace 小工具集
                 Url ??= "https://api.ipify.org";
                 HttpClient httpClient = new HttpClient();
                 return httpClient.GetStringAsync(Url).Result;
+            }
+
+            /// <summary>
+            /// 获取本机User-Agent
+            /// </summary>
+            /// <returns>UG</returns>
+            private static string GetNativeUserAgent()
+            {
+                // 获取操作系统信息
+                string osInfo = Environment.OSVersion.ToString();
+
+                // 获取当前应用程序的版本信息
+                string? appVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString();
+
+                // 获取当前 .NET Framework 版本
+                string dotnetVersion = Environment.Version.ToString();
+
+                // 获取当前进程的信息
+                Process currentProcess = Process.GetCurrentProcess();
+
+                // 从进程信息中获取应用程序名称
+                string applicationName = currentProcess.ProcessName;
+
+                // 构建 UserAgent 字符串
+                string userAgent = $"{applicationName ??= "小工具集"}/{appVersion ??= "0"} ({osInfo}; .NET CLR {dotnetVersion})";
+
+                return userAgent;
             }
         }
         /// <summary>
@@ -1133,21 +1520,13 @@ namespace 小工具集
             /// <param name="Data">文本内容</param>
             /// <param name="Seed">种籽</param>
             /// <returns>值</returns>
-            public static ulong GetTextxxHash(string Data, ulong Seed = 0)
+            public static string GetTextxxHash(string Data, uint Seed = 0)
             {
                 byte[] data = Encoding.UTF8.GetBytes(Data);
-                return xxHash3.ComputeHash(data, data.Length, Seed);
-            }
-            /// <summary>
-            /// 获取文本的Guid
-            /// </summary>
-            /// <param name="Data">文本内容</param>
-            /// <param name="Seed">种籽</param>
-            /// <returns>值</returns>
-            public static Guid GetTextGuid(string Data, ulong Seed = 0)
-            {
-                byte[] data = Encoding.UTF8.GetBytes(Data);
-                return xxHash128.ComputeHash(data, data.Length, Seed).ToGuid();
+                xxHash hash = new xxHash();
+                hash.Init(Seed);
+                hash.Update(data, data.Count());
+                return hash.Digest().ToString("X");
             }
             /// <summary>
             /// 获取文件的xxHash
@@ -1155,38 +1534,46 @@ namespace 小工具集
             /// <param name="Path">文件路径</param>
             /// <param name="Seed">种籽</param>
             /// <returns>值</returns>
-            public static ulong GetFilexxHash(string Path, ulong Seed = 0)
+            public static string GetFilexxHash(string Path, uint Seed = 0)
             {
-                // 使用FileStream读取文件内容并转换为byte[]
-                byte[] data;
-                using (FileStream fs = new FileStream(Path, FileMode.Open, FileAccess.Read))
+                xxHash hash = new xxHash();
+                // 初始化哈希值
+                hash.Init(Seed);
+                // 打开文件流
+                using (FileStream fs = System.IO.File.OpenRead(Path))
                 {
-                    using (BinaryReader br = new BinaryReader(fs))
+                    // 创建一个缓冲区，每次读取 4KB 的数据
+                    byte[] buffer = new byte[102400];
+                    int bytesRead;
+                    // 循环读取文件流，直到结束
+                    while ((bytesRead = fs.Read(buffer, 0, buffer.Length)) > 0)
                     {
-                        data = br.ReadBytes((int)fs.Length);
+                        // 更新哈希值
+                        hash.Update(buffer, bytesRead);
                     }
                 }
-                return xxHash3.ComputeHash(data, data.Length, Seed);
+                // 获取最终的哈希值
+                uint result = hash.Digest();
+                // 输出十六进制格式的哈希值
+                return result.ToString("X");
             }
+
             /// <summary>
-            /// 获取文件的Guid
+            /// 获取文件的SHA256
             /// </summary>
             /// <param name="Path">文件路径</param>
-            /// <param name="Seed">种籽</param>
-            /// <returns>值</returns>
-            public static Guid GetFileGuid(string Path, ulong Seed = 0)
+            /// <returns></returns>
+            public static string GetFilexxSHA256(string Path)
             {
-                // 使用FileStream读取文件内容并转换为byte[]
-                byte[] data;
-                using (FileStream fs = new FileStream(Path, FileMode.Open, FileAccess.Read))
+                using (FileStream stream = System.IO.File.OpenRead(Path))
                 {
-                    using (BinaryReader br = new BinaryReader(fs))
-                    {
-                        data = br.ReadBytes((int)fs.Length);
-                    }
+                    SHA256 sha256 = SHA256.Create();
+                    byte[] hashBytes = sha256.ComputeHash(stream);
+                    string hashHex = BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
+                    return hashHex;
                 }
-                return xxHash128.ComputeHash(data, data.Length, Seed).ToGuid();
             }
+
             /// <summary>
             /// 加密文本
             /// </summary>
@@ -1393,16 +1780,7 @@ namespace 小工具集
         /// </summary>
         public static class Code
         {
-            /// <summary>
-            /// 将OBJ转换成指定类型
-            /// </summary>
-            /// <param name="Data">OBJ内容</param>
-            /// <param name="Type">指定类型</param>
-            /// <returns>转换成指定类型后的内容</returns>
-            public static dynamic ConvertObj(object Data, Type Type)
-            {
-                return Convert.ChangeType(Data, Type);
-            }
+
         }
         /// <summary>
         /// SQL相关
@@ -1569,7 +1947,6 @@ namespace 小工具集
                     return _currentPoolSize;
                 }
             }
-
             /// <summary>
             /// 连接池配置类。
             /// </summary>
@@ -2284,7 +2661,7 @@ namespace 小工具集
                 /// </summary>
                 /// <param name="tableName">要创建的表名。</param>
                 /// <param name="columns">要创建的列定义数组。</param>
-                public void CreateTable(string tableName, string[] columns)
+                public bool CreateTable(string tableName, string[] columns)
                 {
                     Logger.WriteDebug($"创建表'{tableName}' 创建项目{string.Join(",", columns)}");
                     SQLiteConnection? connection = null; // 获取连接
@@ -2299,6 +2676,11 @@ namespace 小工具集
                     }
                     catch (Exception ex)
                     {
+                        if (ex.Message.Contains("table app already exists"))
+                        {
+                            Logger.WriteDebug($"{tableName} 表已存在 跳过创建");
+                            return false;
+                        }
                         Logger.WriteError("创建表时出错：" + ex.Message);
                         throw; // 将异常继续抛出
                     }
@@ -2306,6 +2688,7 @@ namespace 小工具集
                     {
                         Close(connection);
                     }
+                    return true;
                 }
                 /// <summary>
                 /// 生成用于创建表的SQLite查询语句。
@@ -2593,52 +2976,6 @@ namespace 小工具集
                 }
 
                 /// <summary>
-                /// 将数据类对象列表转换为字典。
-                /// </summary>
-                /// <typeparam name="T">数据类类型。</typeparam>
-                /// <param name="dataList">数据类对象列表。</param>
-                /// <param name="NoNull">不要Null值。</param>
-                /// <returns>字典，键为数据类属性，值为数据类对象列表中相应属性的值列表。</returns>
-                public static Dictionary<string, List<object?>?> ConvertToDictionary<T>(List<T> dataList, bool NoNull = false) where T : class
-                {
-                    Dictionary<string, List<object?>?> dictionary = new();
-
-                    PropertyInfo[] properties = typeof(T).GetProperties();
-                    if (NoNull)
-                        properties = properties.Where(item => item != null).ToArray();
-                    foreach (PropertyInfo property in properties)
-                    {
-                        List<object?>? values = dataList.Select(item => property.GetValue(item)).ToList();
-                        if (values != null && NoNull || !NoNull)
-                            dictionary[property.Name] = values;
-                    }
-
-                    return dictionary;
-                }
-
-                /// <summary>
-                /// 将数据类对象转换为字典。
-                /// </summary>
-                /// <typeparam name="T">数据类类型。</typeparam>
-                /// <param name="dataObject">数据类对象。</param>
-                /// <param name="NoNull">不要Null值。</param>
-                /// <returns>字典，键为数据类属性，值为数据类对象的属性值。</returns>
-                public static Dictionary<string, object?>? ConvertToDictionary<T>(T dataObject, bool NoNull = false) where T : class
-                {
-                    Dictionary<string, object?>? dictionary = new();
-
-                    PropertyInfo[] properties = typeof(T).GetProperties();
-                    foreach (PropertyInfo property in properties)
-                    {
-                        object? value = property.GetValue(dataObject);
-                        if (value != null && NoNull || !NoNull)
-                            dictionary[property.Name] = value;
-                    }
-
-                    return dictionary;
-                }
-
-                /// <summary>
                 /// 连接信息
                 /// </summary>
                 public class ConnData
@@ -2651,6 +2988,164 @@ namespace 小工具集
             }
 
 
+            /// <summary>
+            /// 数据库类型
+            /// </summary>
+            public static class SqlServerClass
+            {
+                /// <summary>
+                /// Sqlite
+                /// </summary>
+                public class Sqlite
+                {
+                    /// <summary>
+                    /// 数据库文件物理位置
+                    /// </summary>
+                    public string Server { get; set; } = "DB.db";
+
+                    /// <summary>
+                    /// 连接模式
+                    /// </summary>
+                    public SqliteOpenMode Mode { get; set; }
+
+                    /// <summary>
+                    /// 缓存方式
+                    /// </summary>
+                    public SqliteCacheMode Cache { get; set; }
+
+                    /// <summary>
+                    /// 获取连接字符串
+                    /// </summary>
+                    /// <returns>连接字符串</returns>
+                    public string GetConnectionString()
+                    {
+                        return $"Data Source={Server};Mode={Mode};Cache={Cache};";
+                    }
+
+                    /// <summary>
+                    /// 设置连接
+                    /// </summary>
+                    /// <param name="optionsBuilder">选项生成器</param>
+                    public void SetOptionsBuilder(DbContextOptionsBuilder optionsBuilder)
+                    {
+                        optionsBuilder.UseSqlite(GetConnectionString());
+                    }
+                }
+
+                /// <summary>
+                /// MySql
+                /// </summary>
+                public class MySql
+                {
+                    /// <summary>
+                    /// 服务器地址
+                    /// </summary>
+                    public IPAddress Server { get; set; } = IPAddress.Parse("127.0.0.1");
+
+                    /// <summary>
+                    /// 端口号
+                    /// </summary>
+                    public int Port { get; set; } = 3306;
+
+                    /// <summary>
+                    /// 账号
+                    /// </summary>
+                    public string User { get; set; } = "root";
+
+                    /// <summary>
+                    /// 密码
+                    /// </summary>
+                    public string? Password { get; set; }
+
+                    /// <summary>
+                    /// 数据库名
+                    /// </summary>
+                    public string? Database { get; set; }
+
+                    /// <summary>
+                    /// SSL模式
+                    /// </summary>
+                    public string? SslMode { get; set; }
+
+                    /// <summary>
+                    /// 获取连接字符串
+                    /// </summary>
+                    /// <returns>连接字符串</returns>
+                    public string GetConnectionString()
+                    {
+                        return $"Server={Server};Port={Port};User={User};Password={Password};Database={Database};SslMode={SslMode};";
+                    }
+
+                    /// <summary>
+                    /// 设置连接
+                    /// </summary>
+                    /// <param name="optionsBuilder">选项生成器</param>
+                    public void SetOptionsBuilder(DbContextOptionsBuilder optionsBuilder)
+                    {
+                        optionsBuilder.UseMySQL(GetConnectionString());
+                    }
+                }
+
+                /// <summary>
+                /// SqlServer
+                /// </summary>
+                public class SqlServer
+                {
+                    /// <summary>
+                    /// 服务器地址
+                    /// </summary>
+                    public IPAddress Server { get; set; } = IPAddress.Parse("127.0.0.1");
+
+                    /// <summary>
+                    /// 端口号
+                    /// </summary>
+                    public int Port { get; set; } = 3306;
+
+                    /// <summary>
+                    /// 账号
+                    /// </summary>
+                    public string User { get; set; } = "root";
+
+                    /// <summary>
+                    /// 密码
+                    /// </summary>
+                    public string? Password { get; set; }
+
+                    /// <summary>
+                    /// 数据库名
+                    /// </summary>
+                    public string? Database { get; set; }
+
+                    /// <summary>
+                    /// 获取连接字符串
+                    /// </summary>
+                    /// <returns>连接字符串</returns>
+                    public string GetConnectionString()
+                    {
+                        return $"Server={Server};Port={Port};User={User};Password={Password};Database={Database};";
+                    }
+
+                    /// <summary>
+                    /// 设置连接
+                    /// </summary>
+                    /// <param name="optionsBuilder">选项生成器</param>
+                    public void SetOptionsBuilder(DbContextOptionsBuilder optionsBuilder)
+                    {
+                        optionsBuilder.UseSqlServer(GetConnectionString());
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 将OBJ转换成指定类型
+        /// </summary>
+        /// <param name="Data">OBJ内容</param>
+        /// <param name="Type">指定类型</param>
+        /// <returns>转换成指定类型后的内容</returns>
+        public static dynamic ConvertObj(this object Data, Type Type)
+        {
+            return Convert.ChangeType(Data, Type);
         }
 
         /// <summary>
@@ -2664,6 +3159,204 @@ namespace 小工具集
             var attributes = field?.GetCustomAttributes(typeof(DescriptionAttribute), false) as DescriptionAttribute[];
 
             return attributes != null && attributes.Length > 0 ? attributes[0].Description : enumValue.ToString();
+        }
+
+        /// <summary>
+        /// 将数据类对象列表转换为字典。
+        /// </summary>
+        /// <typeparam name="T">数据类类型。</typeparam>
+        /// <param name="dataList">数据类对象列表。</param>
+        /// <param name="NoNull">不要Null值。</param>
+        /// <returns>字典，键为数据类属性，值为数据类对象列表中相应属性的值列表。</returns>
+        public static Dictionary<string, List<object?>?> ConvertToDictionary<T>(this List<T> dataList, bool NoNull = false) where T : class
+        {
+            Dictionary<string, List<object?>?> dictionary = new();
+
+            PropertyInfo[] properties = typeof(T).GetProperties();
+            if (NoNull)
+                properties = properties.Where(item => item != null).ToArray();
+            foreach (PropertyInfo property in properties)
+            {
+                List<object?>? values = dataList.Select(item => property.GetValue(item)).ToList();
+                if (values != null && NoNull || !NoNull)
+                    dictionary[property.Name] = values;
+            }
+
+            return dictionary;
+        }
+
+        /// <summary>
+        /// 将数据类对象转换为字典。
+        /// </summary>
+        /// <typeparam name="T">数据类类型。</typeparam>
+        /// <param name="dataObject">数据类对象。</param>
+        /// <param name="NoNull">不要Null值。</param>
+        /// <returns>字典，键为数据类属性，值为数据类对象的属性值。</returns>
+        public static Dictionary<string, object?>? ConvertToDictionary<T>(this T dataObject, bool NoNull = false) where T : class
+        {
+            Dictionary<string, object?>? dictionary = new();
+
+            PropertyInfo[] properties = typeof(T).GetProperties();
+            foreach (PropertyInfo property in properties)
+            {
+                object? value = property.GetValue(dataObject);
+                if (value != null && NoNull || !NoNull)
+                    dictionary[property.Name] = value;
+            }
+
+            return dictionary;
+        }
+
+        /// <summary>
+        /// 将任意数据转换成Json
+        /// </summary>
+        /// <typeparam name="T">源数据类型</typeparam>
+        /// <param name="Data">转换目标</param>
+        /// <param name="Option">转换配置</param>
+        /// <returns>Json文本</returns>
+        public static string? ToJsonString<T>(this T Data, JsonSerializerOptions? Option = null)
+        {
+            return System.Text.Json.JsonSerializer.Serialize(Data, Option);
+        }
+
+        /// <summary>
+        /// 将任意数据转换成Json(异步)
+        /// </summary>
+        /// <typeparam name="T">源数据类型</typeparam>
+        /// <param name="Data">转换目标</param>
+        /// <param name="Option">转换配置</param>
+        /// <returns>Json文本</returns>
+        public static async Task<string> ToJsonStringAsync<T>(this T Data, JsonSerializerOptions? Option = null)
+        {
+            using var stream = new MemoryStream();
+            await System.Text.Json.JsonSerializer.SerializeAsync(stream, Data, Data!.GetType(), Option).ConfigureAwait(false);
+            stream.Position = 0;
+            using var reader = new StreamReader(stream);
+            return await reader.ReadToEndAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// 将字符串保存到文本文件。
+        /// </summary>
+        /// <param name="String">要保存的字符串。</param>
+        /// <param name="filePath">要保存到的文件路径。</param>
+        /// <returns>如果成功保存则返回true，否则返回false。</returns>
+        public static async Task<bool> SaveTextToFileAsync(this string String, string filePath)
+        {
+            try
+            {
+                // 使用异步操作写入JSON字符串到文件
+                using (FileStream fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true))
+                {
+                    byte[] Bytes = Encoding.UTF8.GetBytes(String);
+                    await fs.WriteAsync(Bytes, 0, Bytes.Length);
+                }
+
+                Logger.WriteDebug($"字符串已成功保存到文件: {filePath}");
+                return true;
+            }
+            catch (IOException e)
+            {
+                Logger.WriteError($"发生IO错误: {e.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 异步从文件中逐行读取文本并返回整个文件内容作为字符串。
+        /// </summary>
+        /// <param name="filePath">要读取的文件路径。</param>
+        /// <returns>文件内容的字符串。</returns>
+        public static async Task<string?> ReadLargeFileAsync(string filePath)
+        {
+            StringBuilder fileContent = new StringBuilder();
+
+            try
+            {
+                // 使用异步操作逐行读取大文件中的文本
+                using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, useAsync: true))
+                using (StreamReader reader = new StreamReader(fs))
+                {
+                    string? line;
+                    while ((line = await reader.ReadLineAsync()) != null)
+                    {
+                        // 将每一行文本追加到文件内容字符串中
+                        fileContent.AppendLine(line);
+                    }
+                }
+
+                return fileContent.ToString();
+            }
+            catch (IOException e)
+            {
+                Logger.WriteError($"发生IO错误: {e.Message}");
+                return null; // 返回null或适当的错误处理
+            }
+        }
+
+        /// <summary>
+        /// Json字符串转回Class数据类
+        /// </summary>
+        /// <typeparam name="T">目标类型</typeparam>
+        /// <param name="Data">Json字符串</param>
+        /// <returns>目标数据类</returns>
+        public static T? ToClassData<T>(this string? Data)
+        {
+            if (Data is null)
+            {
+                return default;
+            }
+            else
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<T>(Data);
+            }
+        }
+
+        /// <summary>
+        /// Json字符串转回Class数据类(异步)
+        /// </summary>
+        /// <typeparam name="T">目标类型</typeparam>
+        /// <param name="Data">Json字符串</param>
+        /// <returns>目标数据类</returns>
+        public static async Task<T?> ToClassDataAsync<T>(this string? Data)
+        {
+            if (Data is null)
+            {
+                return default;
+            }
+            else
+            {
+                using MemoryStream Steam = new MemoryStream((Encoding.UTF8.GetBytes(Data)));
+                return await System.Text.Json.JsonSerializer.DeserializeAsync<T>(Steam);
+            }
+        }
+
+        /// <summary>
+        /// 类转换
+        /// </summary>
+        /// <param name="source">原数据类</param>
+        /// <param name="destination">目标数据类</param>
+        public static void CopyPropertiesWithSameName(this object source, object destination)
+        {
+            Type sourceType = source.GetType();
+            Type destinationType = destination.GetType();
+
+            PropertyInfo[] sourceProperties = sourceType.GetProperties();
+            PropertyInfo[] destinationProperties = destinationType.GetProperties();
+
+            foreach (var sourceProperty in sourceProperties)
+            {
+                foreach (var destinationProperty in destinationProperties)
+                {
+                    if (sourceProperty.Name == destinationProperty.Name &&
+                        sourceProperty.PropertyType == destinationProperty.PropertyType &&
+                        destinationProperty.CanWrite)
+                    {
+                        destinationProperty.SetValue(destination, sourceProperty.GetValue(source));
+                        break;
+                    }
+                }
+            }
         }
     }
 }
